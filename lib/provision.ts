@@ -1,7 +1,26 @@
 import prisma from './prisma';
 import { callCircleAdminApi } from './circle-admin-api';
 // import crypto from 'node:crypto'; // Removed unused import
-import type { User } from '@/app/generated/prisma';
+// import type { Prisma } from '@prisma/client'; // Remove problematic Prisma import
+import type { ApiResponse } from '@/types'; // Import the new type
+
+// Define a local interface for the expected user record shape
+interface UserWithCircleId {
+    id: string;
+    email: string;
+    name: string | null;
+    circleCommunityMemberId: number | null;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+// Define interfaces for API responses if not already done globally
+interface CircleMember {
+  id: number;
+  user_id: number;
+  community_id: number;
+  // Add other relevant fields
+}
 
 /**
  * Checks if the object is a potential Circle API error response structure.
@@ -36,9 +55,10 @@ export async function provisionCircleAccess(
     stripeSubscriptionId: string,
     stripeCustomerId: string,
     planType: 'monthly' | 'annual'
-): Promise<{ success: boolean; error?: string }> {
+): Promise<ApiResponse<void>> {
     console.log(`Provisioning access for ${userEmail} (ID: ${platformUserId}) to space ${spaceId}`);
-    let userRecord: User | null = null;
+    // Use the locally defined interface
+    let userRecord: UserWithCircleId | null = null;
 
     try {
         // 1. Upsert User in Platform DB (ensure user exists locally)
@@ -52,7 +72,8 @@ export async function provisionCircleAccess(
                     email: userEmail,
                     name: userName,
                 },
-            });
+                select: { id: true, email: true, name: true, circleCommunityMemberId: true, createdAt: true, updatedAt: true }
+            }) as UserWithCircleId; // Add type assertion for safety
             console.log(`User record ${userRecord.id} upserted in DB.`);
         } catch (dbError) {
             console.error(`Failed to upsert user ${platformUserId} in DB:`, dbError);
@@ -84,7 +105,7 @@ export async function provisionCircleAccess(
 
         // 3. Ensure User Exists in Circle (Create if not)
         let circleMemberExists = false;
-        let circleCommunityMemberId: number | undefined = userRecord.circleCommunityMemberId ?? undefined;
+        let circleCommunityMemberId: number | undefined = userRecord?.circleCommunityMemberId ?? undefined;
 
         // If we already have the Circle ID stored, assume they exist in Circle
         if (circleCommunityMemberId) {
@@ -95,19 +116,36 @@ export async function provisionCircleAccess(
         else {
             try {
                 console.log(`Searching for Circle member by email: ${userEmail}`);
-                const searchResult = await callCircleAdminApi<{ records: { id: number }[] }>(
-                    'community_members/search',
-                    { params: { email: userEmail } } // Pass email as param
-                );
-                if (searchResult.records && searchResult.records.length > 0) {
+                const searchResult = await callCircleAdminApi<{ community_members: CircleMember[] }>(`community_members/search`, {
+                    method: 'GET',
+                    params: { email: userEmail },
+                });
+
+                if (searchResult.community_members && searchResult.community_members.length > 0) {
                     circleMemberExists = true;
-                    circleCommunityMemberId = searchResult.records[0].id;
-                    console.log(`Found existing Circle member ${userEmail} with ID: ${circleCommunityMemberId}`);
+                    circleCommunityMemberId = searchResult.community_members[0].id;
+                    console.log(`Found existing Circle member ID: ${circleCommunityMemberId} for email: ${userEmail}`);
                     // Store Circle ID in our DB for future use
                     await prisma.user.update({ where: { id: platformUserId }, data: { circleCommunityMemberId } });
                 } else {
-                     console.log(`Circle member ${userEmail} not found via search.`);
+                     console.log(`Circle member ${userEmail} not found..., will attempt creation.`);
+                     // If not found, create them
+                     console.log(`Attempting to create Circle member for ${userEmail}`);
+                     const createResult = await callCircleAdminApi<CircleMember>('community_members', {
+                         method: 'POST',
+                         body: {
+                             community_id: 1, // Replace with your actual Community ID from Circle if needed, often it's just 1
+                             email: userEmail,
+                             name: userName || userEmail.split('@')[0], // Use provided name or derive from email
+                             skip_invitation: true, // Crucial: Do not send invite email
+                         },
+                     });
+                     circleCommunityMemberId = createResult.id;
+                     console.log(`Successfully created Circle member ${userEmail} with ID: ${circleCommunityMemberId}`);
+                     // Store Circle ID in our DB
+                     await prisma.user.update({ where: { id: platformUserId }, data: { circleCommunityMemberId } });
                 }
+
             } catch (searchError: unknown) {
                 let isNotFoundError = false;
                 if (hasStatusCode(searchError) && searchError.status === 404) {
@@ -152,12 +190,11 @@ export async function provisionCircleAccess(
                 await prisma.user.update({ where: { id: platformUserId }, data: { circleCommunityMemberId } });
             } catch (createError) {
                 console.error(`Failed to create Circle member ${userEmail}:`, createError);
-                // Mark subscription as failed? Rollback?
                 await prisma.subscription.update({
                     where: { id: subscription.id },
                     data: { status: 'provisioning_failed' }
                 });
-                throw new Error(`Failed to create Circle member: ${(createError as Error).message}`);
+                throw createError;
             }
         }
 
@@ -172,16 +209,16 @@ export async function provisionCircleAccess(
             await callCircleAdminApi('space_members', {
                 method: 'POST',
                 body: {
-                    // Use community_member_id if available, otherwise fallback to email (less reliable)
                     community_member_id: circleCommunityMemberId,
                     space_id: spaceId,
-                    // email: userEmail, // Fallback if ID method fails?
+                    email: userEmail,
                 },
             });
             console.log(`Successfully added member ${circleCommunityMemberId} to Circle space ${spaceId}`);
         } catch (addError: unknown) {
              let alreadyMember = false;
-             let errorMessage = 'Unknown error adding member to space';
+             // Variable is used for log messages, no need to store separately
+             // let errorMessage = 'Unknown error adding member to space';
 
              if (typeof addError === 'object' && addError !== null) {
                 // Check common error message patterns
@@ -192,7 +229,7 @@ export async function provisionCircleAccess(
                     alreadyMember = true;
                 }
                 // Capture a more specific message if possible
-                 if ((addError as Error).message) errorMessage = (addError as Error).message;
+                 // if ((addError as Error).message) errorMessage = (addError as Error).message;
              }
 
              if (alreadyMember) {
@@ -203,27 +240,28 @@ export async function provisionCircleAccess(
                     where: { id: subscription.id },
                     data: { status: 'provisioning_failed' }
                 });
-                // Throw the captured or a generic message
-                throw new Error(`Failed to add member to Circle space: ${errorMessage}`);
+                throw addError;
              }
         }
 
         console.log(`Provisioning completed successfully for ${userEmail} to space ${spaceId}.`);
-        return { success: true };
+        return { success: true, data: undefined };
 
     } catch (error) {
         console.error(`Provisioning failed overall for ${userEmail}, space ${spaceId}:`, error);
-        // Attempt to mark subscription as failed if possible
-        if (userRecord) { // Check if user upsert succeeded before trying to update subscription
+        const errorMessage = (error instanceof Error) ? error.message : 'Unknown provisioning error';
+        // Attempt to mark subscription as failed if possible (best effort)
+        if (userRecord) { 
             try {
                  await prisma.subscription.updateMany({
-                    where: { userId: platformUserId, communityId: communityId, status: 'active' }, // only update if currently active
+                    where: { userId: platformUserId, communityId: communityId, status: 'active' }, 
                     data: { status: 'provisioning_failed' }
                  });
             } catch (updateError) {
                 console.error("Failed to mark subscription as provisioning_failed after main error:", updateError);
             }
         }
-        return { success: false, error: (error as Error).message || 'Unknown provisioning error' };
+        // Return failure with error message and potentially the original error details
+        return { success: false, error: errorMessage, details: error }; 
     }
 } 

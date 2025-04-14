@@ -3,8 +3,6 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import {
   ClerkProvider,
-  SignInButton,
-  SignUpButton,
   SignedIn,
   SignedOut,
   UserButton
@@ -36,12 +34,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                   <UserButton afterSignOutUrl="/" />
                 </SignedIn>
                 <SignedOut>
-                  <SignInButton mode="modal">
+                  <Link href="/sign-in">
                     <Button variant="ghost">Sign In</Button>
-                  </SignInButton>
-                  <SignUpButton mode="modal">
+                  </Link>
+                  <Link href="/sign-up">
                     <Button>Sign Up</Button>
-                  </SignUpButton>
+                  </Link>
                 </SignedOut>
               </nav>
             </div>

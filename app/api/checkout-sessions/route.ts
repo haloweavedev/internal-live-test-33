@@ -1,94 +1,193 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { auth, createClerkClient } from '@clerk/nextjs/server';
 import Stripe from 'stripe';
-import { auth } from '@clerk/nextjs/server'; // Import server-side auth
+import type { ApiResponse, CheckoutSessionData } from '@/types'; // Use import type and adjust path if needed (e.g., @/types/api)
+// import { provisionUserAccess } from '@/lib/provision'; // Commented out as likely unused in this specific context
 
+// --- Environment Variable Checks ---
+console.log(`API Route Init: CLERK_SECRET_KEY is ${process.env.CLERK_SECRET_KEY ? 'SET' : 'NOT SET'}`);
+console.log(`API Route Init: STRIPE_SECRET_KEY is ${process.env.STRIPE_SECRET_KEY ? 'SET' : 'NOT SET'}`);
+const clerkSecretKey = process.env.CLERK_SECRET_KEY;
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+// --- End Checks ---
 
+if (!clerkSecretKey) {
+    console.error('FATAL: CLERK_SECRET_KEY environment variable is not set.');
+}
 if (!stripeSecretKey) {
-  throw new Error('The STRIPE_SECRET_KEY environment variable is not set.');
+    console.error('FATAL: STRIPE_SECRET_KEY environment variable is not set.');
 }
 
-const stripe = new Stripe(stripeSecretKey, {
-  // apiVersion: "2023-10-16", // Optionally specify API version
-});
+// Initialize Stripe client (only if key exists)
+const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, {
+    // Removed apiVersion to use library default
+    typescript: true,
+}) : null;
 
-export async function POST(request: Request) {
+// Initialize Clerk Backend Client using the factory function
+const clerkClient = clerkSecretKey ? createClerkClient({ secretKey: clerkSecretKey }) : null;
+
+// Define EmailAddress type based on Clerk's structure
+interface EmailAddress {
+    id: string | null;
+    emailAddress: string;
+}
+
+export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<CheckoutSessionData>>> {
+    if (!stripe || !clerkClient) {
+        const errorMsg = !stripe ? 'Stripe configuration error.' : 'Clerk configuration error (secret key missing?).';
+        console.error('Configuration Error:', errorMsg);
+        return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
+    }
+
+    try {
   const authObject = await auth(); 
   const userId = authObject.userId;
 
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            console.warn('Unauthorized attempt to create checkout session without user ID.');
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 }); 
   }
 
-  // Try to get email from auth claims or session claims first
-  let userEmail = authObject.sessionClaims?.email; 
-
-  // If email not in claims, we might need to fetch the user separately 
-  // (Requires @clerk/nextjs)
-  // if (!userEmail) { 
-  //    try {
-  //        const user = await clerkClient.users.getUser(userId);
-  //        userEmail = user.emailAddresses.find(e => e.id === user.primaryEmailAddressId)?.emailAddress;
-  //    } catch (fetchError) {
-  //        console.error(`Failed to fetch Clerk user details for ${userId}:`, fetchError);
-  //        return NextResponse.json({ error: 'Could not retrieve user details' }, { status: 500 });
-  //    }
-  // }
+        // --- Start: Improved Email Fetching --- 
+        let userEmail: string | undefined | null = authObject.sessionClaims?.email as string | undefined | null; 
 
   if (!userEmail) {
-       console.error(`User email not found for Clerk user ID: ${userId}`);
-       // Ensure userEmail has a fallback or throw error
-       // For now, returning an error if email is strictly required.
-       return NextResponse.json({ error: 'User email could not be determined' }, { status: 400 });
-  }
+            try {
+                console.log(`Email not in claims for ${userId}, attempting direct fetch...`);
+                // Use the explicitly created clerkClient instance
+                const user = await clerkClient.users.getUser(userId); 
+                userEmail = user.emailAddresses.find((e: EmailAddress) => e.id === user.primaryEmailAddressId)?.emailAddress;
+                if (userEmail) {
+                     console.log(`Successfully fetched email for ${userId} directly.`);
+                } else {
+                     console.warn(`Primary email not found for user ${userId} even after direct fetch.`);
+                }
+            } catch (fetchError: unknown) {
+                console.error(`Failed to fetch Clerk user details for ${userId}:`, fetchError);
+                 let errorMsg = 'Could not fetch user details to proceed with checkout.';
+                 if (fetchError instanceof Error) {
+                     errorMsg = `${errorMsg} Reason: ${fetchError.message}`;
+                 }
+                // Return a server error as we couldn't verify email due to an API issue
+                return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
+            }
+        }
 
-  const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  let priceId: string;
-  let communitySlug: string;
-  let circleSpaceId: number;
+        if (!userEmail) {
+            console.error(`User email could not be determined for Clerk user ID: ${userId}. Cannot proceed with checkout.`);
+            // This indicates a configuration or data issue (user might not have a primary email)
+            return NextResponse.json({ success: false, error: 'User primary email could not be determined' }, { status: 400 });
+        }
+        // --- End: Improved Email Fetching ---
 
-  try {
     const body = await request.json();
-    priceId = body.priceId;
-    communitySlug = body.communitySlug; // Expect this from frontend
-    circleSpaceId = body.circleSpaceId; // Expect this from frontend
+        const { priceId, communitySlug, communityName, planType, circleSpaceId } = body;
 
-    if (!priceId || !communitySlug || !circleSpaceId || typeof circleSpaceId !== 'number') {
-      return NextResponse.json({ error: 'Price ID (string), Community Slug (string), and Circle Space ID (number) are required' }, { status: 400 });
-    }
+        // Validate required fields from the request body
+        if (!priceId || typeof priceId !== 'string') {
+            return NextResponse.json({ success: false, error: 'Missing or invalid priceId (string)' }, { status: 400 });
+        }
+        if (!communitySlug || typeof communitySlug !== 'string') {
+            return NextResponse.json({ success: false, error: 'Missing or invalid communitySlug (string)' }, { status: 400 });
+        }
+        if (!circleSpaceId || typeof circleSpaceId !== 'number') {
+            return NextResponse.json({ success: false, error: 'Missing or invalid circleSpaceId (number)' }, { status: 400 });
+        }
+        if (!communityName || typeof communityName !== 'string') {
+            return NextResponse.json({ success: false, error: 'Missing or invalid communityName (string)' }, { status: 400 });
+        }
+        if (!planType || typeof planType !== 'string') {
+            return NextResponse.json({ success: false, error: 'Missing or invalid planType (string)' }, { status: 400 });
+        }
 
-    // Create Stripe Checkout Session using the determined userEmail
+        // Construct URLs based on environment
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+        
+        // --- Construct Success URL Correctly --- 
+        // Create the base URL first
+        const successUrlBase = `${baseUrl}/payment-success`;
+        // Prepare parameters for the query string
+        const successUrlParams = new URLSearchParams({
+            // session_id is added by Stripe via the template variable in successUrlBaseWithTemplate
+            spaceId: circleSpaceId.toString(),
+            communitySlug: communitySlug,
+        });
+        // Construct the final URL with the template variable AND the other parameters
+        const successUrl = `${successUrlBase}?session_id={CHECKOUT_SESSION_ID}&${successUrlParams.toString()}`; 
+        // --- End Success URL Construction --- 
+
+        const cancelUrl = `${baseUrl}/subscribe/${communitySlug}?cancelled=true`; // Use communitySlug in cancel URL
+
+        console.log(`Creating Stripe checkout session for user ${userId} (${userEmail}), price ${priceId}`);
+        console.log(`Success URL: ${successUrl}`);
+        console.log(`Cancel URL: ${cancelUrl}`);
+
+        // Look for an existing Stripe customer by email, or create one if not found
+        const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+        let customerId: string;
+
+        if (customers.data.length > 0) {
+            customerId = customers.data[0].id;
+            console.log(`Found existing Stripe customer: ${customerId} for email ${userEmail}`);
+        } else {
+            const newCustomer = await stripe.customers.create({
+                email: userEmail,
+                metadata: {
+                    clerkUserId: userId, // Link Stripe customer to Clerk user ID
+                },
+            });
+            customerId = newCustomer.id;
+            console.log(`Created new Stripe customer: ${customerId} for email ${userEmail}`);
+        }
+
+        // Create the Stripe Checkout Session
     const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
       payment_method_types: ['card'],
-      customer_email: userEmail, // Use the determined email
       line_items: [
         {
           price: priceId,
           quantity: 1,
         },
       ],
-      // Include relevant info in success URL for provisioning page
-      success_url: `${origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&spaceId=${circleSpaceId}&communitySlug=${communitySlug}`,
-      // Redirect back to the specific community subscription page on cancel
-      cancel_url: `${origin}/subscribe/${communitySlug}?cancelled=true`,
-      // Pass Clerk User ID for linking in success page or webhook
-      client_reference_id: userId,
-      // Metadata is useful for webhooks (if implemented later)
+            mode: 'subscription',
+            success_url: successUrl,
+            cancel_url: cancelUrl,
+            customer: customerId, // Associate session with the Stripe customer
+            customer_update: {
+                address: 'auto'
+            },
+            client_reference_id: userId, // Recommended to pass Clerk User ID here
       metadata: {
-          userId: userId,
-          spaceId: circleSpaceId.toString(), // Metadata values must be strings
+                userId: userId, // Keep Clerk ID in metadata
+                spaceId: circleSpaceId.toString(), // Ensure spaceId is in metadata
           priceId: priceId,
           communitySlug: communitySlug,
-      }
-    });
+                planType: planType, 
+            },
+            automatic_tax: { enabled: true }, 
+            allow_promotion_codes: true,
+        });
 
-    // Return session ID and the checkout URL
-    return NextResponse.json({ sessionId: session.id, url: session.url });
+    if (!session.url) {
+            console.error('Stripe session URL was null.', session);
+            return NextResponse.json({ success: false, error: 'Could not create checkout session URL.' }, { status: 500 });
+    }
 
-  } catch (error) {
-    console.error('Error creating checkout session:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: `Could not create checkout session: ${errorMessage}` }, { status: 500 });
+        console.log(`Stripe checkout session created: ${session.id} for user ${userId}`);
+
+        // Return the session URL to the client
+        return NextResponse.json<ApiResponse<CheckoutSessionData>>({ 
+        success: true, 
+            data: { checkoutUrl: session.url }
+        });
+
+    } catch (error: unknown) {
+        console.error('Error creating Stripe checkout session:', error);
+        let errorMessage = 'An unexpected error occurred.';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        }
+        return NextResponse.json<ApiResponse<never>>({ success: false, error: `Could not create checkout session: ${errorMessage}`, details: error }, { status: 500 }); // Include more detail in error
   }
 } 

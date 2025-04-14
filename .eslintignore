@@ -5,4 +5,9 @@
 node_modules
 
 # Ignore generated Prisma client
-app/generated/prisma/ 
+app/generated/
+app/generated/**
+app/generated/**/*
+node_modules/.prisma/
+.prisma/
+**/generated/** 

@@ -1,5 +1,5 @@
 // lib/circle-member-api.ts
-const CIRCLE_BASE_URL = process.env.CIRCLE_BASE_URL;
+const CIRCLE_BASE_URL = process.env.CIRCLE_BASE_URL?.replace(/\/$/, ''); // Ensure no trailing slash
 
 // Define a more specific error type
 interface ApiError extends Error {
@@ -26,7 +26,7 @@ function isPotentialApiErrorData(data: unknown): data is { message?: string; err
 }
 
 /**
- * Calls the Circle Member API (v1).
+ * Calls the Circle Member API (Headless v1).
  * Requires a valid member access token.
  * @param endpoint The API endpoint path (e.g., 'spaces/:id')
  * @param options Fetch options including method, body, cache, URL parameters, and accessToken.
@@ -46,15 +46,20 @@ export async function callCircleMemberApi<T = unknown>(
         throw new Error('Circle Member API access token is required.');
     }
 
-    const url = new URL(`${CIRCLE_BASE_URL}/api/v1/${endpoint}`);
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
+    
+    // --- CORRECTED URL Path for Headless Member API --- 
+    const url = new URL(`${CIRCLE_BASE_URL}/api/headless/v1/${cleanEndpoint}`);
+    // --- End Correction --- 
 
     if (params) {
         for (const [key, value] of Object.entries(params)) {
             url.searchParams.append(key, String(value));
         }
     }
+    const finalUrl = url.toString();
 
-    console.log(`Calling Circle Member API: ${method} ${url.toString()}`);
+    console.log(`Calling Circle Member API: ${method} ${finalUrl}`);
 
     const headers: HeadersInit = {
         'Authorization': `Bearer ${accessToken}`,
@@ -69,7 +74,7 @@ export async function callCircleMemberApi<T = unknown>(
     };
 
     try {
-        const response = await fetch(url.toString(), fetchOptions);
+        const response = await fetch(finalUrl, fetchOptions);
 
         const contentType = response.headers.get('content-type');
         let data: unknown;
@@ -81,14 +86,14 @@ export async function callCircleMemberApi<T = unknown>(
             } else {
                 errorText = await response.text();
                  if (response.ok) {
-                    console.log(`Circle Member API ${method} ${url.toString()} returned non-JSON success (${response.status})`);
+                    console.log(`Circle Member API ${method} ${finalUrl} returned non-JSON success (${response.status})`);
                     data = { success: true, status: response.status, message: 'Operation successful (non-JSON response)' };
                  } else {
-                    // Will be handled below
+                    // Handled below
                  }
             }
         } catch (parseError) {
-            console.error(`Error parsing response body for ${method} ${url.toString()}:`, parseError);
+            console.error(`Error parsing response body for ${method} ${finalUrl}:`, parseError);
             const error: ApiError = new Error(`Failed to parse API response: ${(parseError as Error).message}`);
             error.status = response.status;
             throw error;
@@ -99,18 +104,18 @@ export async function callCircleMemberApi<T = unknown>(
              if (data && isPotentialApiErrorData(data)) {
                 errorMessage = data.message || data.error || errorMessage;
             } else if (errorText) {
-                 errorMessage = `${errorMessage} - ${errorText}`;
+                 errorMessage = `${errorMessage} - Received non-JSON response (length: ${errorText.length})`; // Concise log for non-JSON
             }
-            console.error(`Circle Member API Error (${response.status}) for ${method} ${url.toString()}:`, data || errorText);
+            console.error(`Circle Member API Error (${response.status}) for ${method} ${finalUrl}: ${errorMessage}`); // Log concise message
             const error: ApiError = new Error(errorMessage);
             error.status = response.status;
-            error.details = data || errorText;
+            error.details = data || errorText; // Attach full details to thrown error
             throw error;
         }
 
         return data as T;
     } catch (error) {
-        console.error(`Network or processing error in callCircleMemberApi for ${method} ${url.toString()}:`, error);
+        console.error(`Network or processing error in callCircleMemberApi for ${method} ${finalUrl}:`, error);
         if (error instanceof Error) {
             throw error;
         }

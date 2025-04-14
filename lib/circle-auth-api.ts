@@ -1,5 +1,5 @@
 // lib/circle-auth-api.ts
-const CIRCLE_BASE_URL = process.env.CIRCLE_BASE_URL;
+const CIRCLE_BASE_URL = process.env.CIRCLE_BASE_URL?.replace(/\/$/, ''); // Ensure no trailing slash
 // Use the Headless Auth API Key
 const HEADLESS_AUTH_API_KEY = process.env.CIRCLE_HEADLESS_AUTH_API_KEY;
 
@@ -28,7 +28,7 @@ function isPotentialApiErrorData(data: unknown): data is { message?: string; err
 
 /**
  * Calls the Circle Headless Auth API (for generating member tokens).
- * @param endpoint The API endpoint path (e.g., 'auth_token')
+ * @param endpoint The API endpoint path (e.g., 'auth_token') - **VERIFY THIS PATH**
  * @param options Fetch options including method, body, cache, and URL parameters.
  * @returns The JSON response from the API.
  * @throws Error if API keys are missing or if the API call fails.
@@ -43,17 +43,19 @@ export async function callCircleHeadlessAuthApi<T = unknown>(
     throw new Error('Circle Headless Auth API Key or Base URL not configured.');
   }
 
-  // Construct URL - Headless Auth endpoints might be different path, adjust if needed
-  // Assuming they are under /api/headless/v1/ for now - PLEASE VERIFY Circle Docs
-  const url = new URL(`${CIRCLE_BASE_URL}/api/headless/v1/${endpoint}`);
+  // Ensure endpoint doesn't start with a slash
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
+  // ** Verify the correct base path for Headless Auth API from Circle Docs **
+  const url = new URL(`${CIRCLE_BASE_URL}/api/v1/headless/${cleanEndpoint}`); 
 
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       url.searchParams.append(key, String(value));
     }
   }
+  const finalUrl = url.toString();
 
-  console.log(`Calling Circle Headless Auth API: ${method} ${url.toString()}`);
+  console.log(`Calling Circle Headless Auth API: ${method} ${finalUrl}`);
 
   const headers: HeadersInit = {
     // Use the Headless Auth Key
@@ -69,7 +71,7 @@ export async function callCircleHeadlessAuthApi<T = unknown>(
   };
 
   try {
-    const response = await fetch(url.toString(), fetchOptions);
+    const response = await fetch(finalUrl, fetchOptions);
 
     const contentType = response.headers.get('content-type');
     let data: unknown;
@@ -81,36 +83,47 @@ export async function callCircleHeadlessAuthApi<T = unknown>(
       } else {
         errorText = await response.text();
         if (response.ok) {
-          console.log(`Circle Headless Auth API ${method} ${url.toString()} returned non-JSON success (${response.status})`);
+          console.log(`Circle Headless Auth API ${method} ${finalUrl} returned non-JSON success (${response.status})`);
           data = { success: true, status: response.status, message: 'Operation successful (non-JSON response)' };
         } else {
-          // Will be handled below
+          // Handled below
         }
       }
     } catch (parseError) {
-      console.error(`Error parsing response body for ${method} ${url.toString()}:`, parseError);
+      console.error(`Error parsing response body for ${method} ${finalUrl}:`, parseError);
       const error: ApiError = new Error(`Failed to parse API response: ${(parseError as Error).message}`);
       error.status = response.status;
       throw error;
     }
 
     if (!response.ok) {
-      let errorMessage = `Circle API Error: ${response.status}`;
+      const baseErrorMessage = `Circle API Error: ${response.status}`;
+      let detailedErrorMessage = baseErrorMessage; // Start with base message
+      
       if (data && isPotentialApiErrorData(data)) {
-        errorMessage = data.message || data.error || errorMessage;
+        // If we got JSON data with a message/error, use that for the main error message
+        detailedErrorMessage = data.message || data.error || baseErrorMessage;
       } else if (errorText) {
-        errorMessage = `${errorMessage} - ${errorText}`;
+        // If we got non-JSON text (like HTML), create a generic message for logging
+        // but keep the full text for the error details.
+        detailedErrorMessage = `${baseErrorMessage} - Received non-JSON response (length: ${errorText.length})`;
+      } else {
+          detailedErrorMessage = `${baseErrorMessage} - No response body received.`;
       }
-      console.error(`Circle Headless Auth API Error (${response.status}) for ${method} ${url.toString()}:`, data || errorText);
-      const error: ApiError = new Error(errorMessage);
+
+      // Log the concise message
+      console.error(`Circle Headless Auth API Error (${response.status}) for ${method} ${finalUrl}: ${detailedErrorMessage}`); 
+      
+      // Throw an error with the detailed message, attaching full details
+      const error: ApiError = new Error(detailedErrorMessage);
       error.status = response.status;
-      error.details = data || errorText;
+      error.details = data || errorText; // Attach full JSON data or HTML text
       throw error;
     }
 
     return data as T;
   } catch (error) {
-    console.error(`Network or processing error in callCircleHeadlessAuthApi for ${method} ${url.toString()}:`, error);
+    console.error(`Network or processing error in callCircleHeadlessAuthApi for ${method} ${finalUrl}:`, error);
     if (error instanceof Error) {
       throw error;
     }
