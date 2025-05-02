@@ -1,11 +1,10 @@
-import { auth, currentUser } from '@clerk/nextjs/server';
-import { redirect } from 'next/navigation';
-import { callCircleHeadlessAuthApi } from '@/lib/circle-auth-api';
-import { callCircleMemberApi } from '@/lib/circle-member-api';
+'use client';
+
+import { useEffect, useState, Suspense } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import SpaceContent from './space-content'; // Path might need adjustment
-import { Suspense } from 'react'; // Import Suspense
+import SpaceContent from './space-content';
 
 // --- Simplified Types (Expand as needed based on Circle API response) ---
 interface CircleSpaceDetails {
@@ -28,144 +27,101 @@ interface CirclePost {
     // Add other relevant fields: comment_count, like_count, user_name, user_avatar_url, etc.
 }
 
-// Define the expected shape of the auth token response
-interface CircleAuthTokenResponse {
-    access_token: string;
-    refresh_token?: string; // Optional, handle if provided
-    expires_in?: number;
-}
+// --- Main Content Component --- 
+function PlatformSpaceContent() {
+    const params = useParams();
+    const router = useRouter();
+    const [isLoading, setIsLoading] = useState(true);
+    const [spaceDetails, setSpaceDetails] = useState<CircleSpaceDetails | null>(null);
+    const [initialPosts, setInitialPosts] = useState<CirclePost[]>([]);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+    const [accessToken, setAccessToken] = useState<string | null>(null);
 
-// Define the expected shape of the posts list response
-interface CirclePostListResponse {
-    records: CirclePost[];
-    // Add pagination fields if needed: total_count, per_page, page
-}
-
-/**
- * Checks if the object is an error with status code.
- */
-function hasStatusCode(error: unknown): error is { status?: number } {
-    return typeof error === 'object' && error !== null && 'status' in error;
-}
-
-// --- Token Management (DEMO ONLY - NOT FOR PRODUCTION) ---
-// This function is a placeholder for complex, secure token management.
-// It calls the auth API every time, doesn't handle refresh tokens, and has no caching.
-async function getMemberAccessToken(email: string): Promise<string | null> {
-    console.warn("DEMO ONLY: Using direct Headless Auth API call for token. Implement proper token management for production.");
-    try {
-        // This directly calls the Auth API every time
-        const tokenData = await callCircleHeadlessAuthApi<CircleAuthTokenResponse>('auth_token', {
-            method: 'POST',
-            body: { email: email }
-        });
-        // Check if access_token exists in the response
-        if (tokenData && typeof tokenData.access_token === 'string') {
-             return tokenData.access_token;
+    useEffect(() => {
+        const spaceId = params.spaceId as string;
+        
+        // Validate spaceId
+        const spaceIdNum = Number.parseInt(spaceId, 10);
+        if (Number.isNaN(spaceIdNum)) {
+            setFetchError('Invalid Space ID provided in the URL.');
+            setIsLoading(false);
+            return;
         }
-        console.error("Failed to get valid access_token from Circle Auth API response:", tokenData);
-        return null;
-    } catch (error) {
-        console.error("Error calling Circle Headless Auth API:", error);
-        return null;
-    }
-}
 
-// --- Main Server Component --- 
-export default async function PlatformSpacePage({ params }: { params: { spaceId: string } }) {
-    const authObject = await auth(); // Await auth
-    const userId = authObject.userId;
-    const user = await currentUser();
+        const fetchSpaceData = async () => {
+            try {
+                // Get access token and space data from the API
+                const response = await fetch(`/api/circle-space-data?spaceId=${spaceIdNum}`);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    if (response.status === 401) {
+                        // Unauthorized, redirect to sign-in
+                        router.push('/sign-in');
+                        return;
+                    }
+                    throw new Error(errorData.error || 'Failed to load space data');
+                }
 
-    if (!userId || !user?.primaryEmailAddress?.emailAddress) {
-        console.log('User not authenticated, redirecting to sign-in.');
-        redirect('/sign-in');
-    }
+                const data = await response.json();
+                setAccessToken(data.accessToken);
+                setSpaceDetails(data.spaceDetails);
+                setInitialPosts(data.posts || []);
+            } catch (error) {
+                console.error('Error fetching space data:', error);
+                setFetchError(error instanceof Error ? error.message : 'Failed to load space content');
+            } finally {
+                setIsLoading(false);
+            }
+        };
 
-    // Use Number.parseInt for clarity and safety
-    const spaceIdNum = Number.parseInt(params.spaceId, 10);
-    // Use Number.isNaN for type safety
-    if (Number.isNaN(spaceIdNum)) {
-        return (
-            <div className="container mx-auto p-4">
-                <p className="text-red-500">Invalid Space ID provided in the URL.</p>
-                 <Link href="/"><Button variant="outline" className="mt-4">&larr; Back to Communities</Button></Link>
-            </div>
-        );
-    }
-
-    console.log(`Fetching access token for user: ${user.primaryEmailAddress.emailAddress}`);
-    const accessToken = await getMemberAccessToken(user.primaryEmailAddress.emailAddress);
-
-    if (!accessToken) {
-        return (
-            <div className="container mx-auto p-4">
-                 <Link href="/"><Button variant="outline" className="mb-4">&larr; Back to Communities</Button></Link>
-                 <p className="text-red-500">Error: Could not authenticate your session with the community platform. Access denied. Please try again later or contact support.</p>
-            </div>
-       );
-    }
-    console.log('Successfully obtained member access token.');
-
-    // --- Fetch Space Data --- 
-    // Use Suspense for better loading states if fetching takes time
-    // For simplicity here, we await directly
-
-    let spaceDetails: CircleSpaceDetails | null = null;
-    let initialPosts: CirclePost[] = [];
-    let fetchError: string | null = null;
-
-    try {
-        console.log(`Fetching space details for spaceId: ${spaceIdNum}`);
-        // Fetch space details
-        spaceDetails = await callCircleMemberApi<CircleSpaceDetails>(`spaces/${spaceIdNum}`, { accessToken });
-        console.log(`Successfully fetched space details: ${spaceDetails?.name}`);
-
-        console.log(`Fetching posts for spaceId: ${spaceIdNum}`);
-        // Fetch posts (limit for demo)
-        const postData = await callCircleMemberApi<CirclePostListResponse>(`spaces/${spaceIdNum}/posts`, { accessToken, params: { per_page: 10 } });
-        initialPosts = postData?.records || [];
-        console.log(`Successfully fetched ${initialPosts.length} posts.`);
-
-    } catch (error: unknown) {
-        console.error(`Error fetching Circle space data for space ${spaceIdNum}:`, error);
-        fetchError = (error instanceof Error) ? error.message : "Failed to load space content.";
-        // Specific check for 403 Forbidden using type guard
-        if (hasStatusCode(error) && error.status === 403) {
-            fetchError = "Access Denied: You may not have access to this specific community space. Please check your subscription or contact support.";
-        }
-    }
+        fetchSpaceData();
+    }, [params.spaceId, router]);
 
     return (
         <div className="container mx-auto p-4">
             <Link href="/"><Button variant="outline" className="mb-4">&larr; Back to Communities</Button></Link>
 
-            {/* Display Loading / Error / Content */} 
+            {/* Display Loading / Error / Content */}
+            {isLoading && (
+                <h1 className="text-3xl font-bold mb-6">Loading Community Space...</h1>
+            )}
+
             {fetchError && (
                 <div className="border-l-4 border-red-500 bg-red-50 p-4 mb-6">
-                     <p className="font-semibold text-red-700">Error Loading Community Space</p>
-                     <p className="text-red-600">{fetchError}</p>
+                    <p className="font-semibold text-red-700">Error Loading Community Space</p>
+                    <p className="text-red-600">{fetchError}</p>
                 </div>
             )}
 
             {spaceDetails && !fetchError && (
                 <h1 className="text-3xl font-bold mb-6">Welcome to {spaceDetails.name}</h1>
             )}
-            {!spaceDetails && !fetchError && (
-                <>
-                     <h1 className="text-3xl font-bold mb-6">Loading Community Space...</h1>
-                     {/* Correct JSX Comment Syntax */}
-                     {/* Add a loading spinner/skeleton here */}
-                </>
-            )}
 
             {/* Pass data to client component for rendering posts */}
-            {/* Only render SpaceContent if there wasn't a fatal fetch error */}
-            {!fetchError && (
-                <Suspense fallback={<p>Loading posts...</p>}> 
-                    <SpaceContent initialPosts={initialPosts} spaceId={spaceIdNum} accessToken={accessToken} />
+            {!fetchError && !isLoading && accessToken && (
+                <Suspense fallback={<p>Loading posts...</p>}>
+                    <SpaceContent 
+                        initialPosts={initialPosts} 
+                        spaceId={Number(params.spaceId)} 
+                        accessToken={accessToken} 
+                    />
                 </Suspense>
             )}
         </div>
+    );
+}
+
+// --- Main Page Component wrapped with Suspense ---
+export default function PlatformSpacePage() {
+    return (
+        <Suspense fallback={
+            <div className="container mx-auto p-4">
+                <Link href="/"><Button variant="outline" className="mb-4">&larr; Back to Communities</Button></Link>
+                <h1 className="text-3xl font-bold mb-6">Loading Community Space...</h1>
+            </div>
+        }>
+            <PlatformSpaceContent />
+        </Suspense>
     );
 } 

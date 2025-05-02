@@ -75,8 +75,7 @@ export async function callCircleAdminApi<T = unknown>(
     // Handle potential empty responses for DELETE etc.
     if (response.status === 204 && method === 'DELETE') {
       console.log(`Circle Admin API ${method} ${finalUrl} successful (204 No Content)`);
-      // @ts-expect-error - Returning success marker for 204
-      return { success: true, message: 'Operation successful (No Content)' } as T;
+      return { success: true, message: 'Operation successful (No Content)' } as unknown as T;
     }
 
     const contentType = response.headers.get('content-type');

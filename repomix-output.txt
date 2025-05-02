@@ -1,0 +1,4154 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+================================================================
+File Summary
+================================================================
+
+Purpose:
+--------
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+
+File Format:
+------------
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+4. Multiple file entries, each consisting of:
+  a. A separator line (================)
+  b. The file path (File: path/to/file)
+  c. Another separator line
+  d. The full contents of the file
+  e. A blank line
+
+Usage Guidelines:
+-----------------
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+
+Notes:
+------
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+
+Additional Info:
+----------------
+
+================================================================
+Directory Structure
+================================================================
+app/
+  admin/
+    page.tsx
+  api/
+    checkout-sessions/
+      route.ts
+    get-communities/
+      route.ts
+  cancel/
+    page.tsx
+  checkout/
+    page.tsx
+  landing-test/
+    page.tsx
+  payment-success/
+    page.tsx
+  platform-space/
+    [spaceId]/
+      page.tsx
+      space-content.tsx
+  sign-in/
+    [[...sign-in]]/
+      page.tsx
+  sign-up/
+    [[...sign-up]]/
+      page.tsx
+  subscribe/
+    [communitySlug]/
+      page.tsx
+  success/
+    page.tsx
+  globals.css
+  layout.tsx
+  page.tsx
+components/
+  ui/
+    alert.tsx
+    avatar.tsx
+    badge.tsx
+    button.tsx
+    card.tsx
+    dropdown-menu.tsx
+    input.tsx
+    label.tsx
+    navigation-menu.tsx
+    sheet.tsx
+    skeleton.tsx
+    sonner.tsx
+    table.tsx
+lib/
+  circle-admin-api.ts
+  circle-auth-api.ts
+  circle-member-api.ts
+  prisma.ts
+  provision.ts
+  utils.ts
+prisma/
+  migrations/
+    20250414100340_initial_schema/
+      migration.sql
+    migration_lock.toml
+  schema.prisma
+  seed.ts
+public/
+  file.svg
+  globe.svg
+  next.svg
+  vercel.svg
+  window.svg
+types/
+  index.ts
+.eslintignore
+.eslintrc.js
+.gitignore
+components.json
+eslint.config.mjs
+middleware.ts
+next.config.ts
+package.json
+postcss.config.mjs
+README.md
+tsconfig.json
+
+================================================================
+Files
+================================================================
+
+================
+File: app/landing-test/page.tsx
+================
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+
+export default function LandingPage() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[70vh] text-center px-4">
+      <h1 className="text-4xl md:text-5xl font-bold mb-4">
+        Welcome to Communities.irish Demo
+      </h1>
+      <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mb-8">
+        Discover, join, and engage with exclusive online communities hosted on Circle.so.
+        Subscribe easily and securely via Stripe to unlock access.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-4">
+        <Link href="/communities">
+          <Button size="lg">Explore Communities</Button>
+        </Link>
+        <Link href="/sign-up">
+          <Button size="lg" variant="outline">
+            Sign Up Now
+          </Button>
+        </Link>
+      </div>
+      <p className="text-sm text-muted-foreground mt-12">
+        This platform demonstrates integration between Next.js, Clerk, Stripe, Prisma, and Circle.so.
+      </p>
+    </div>
+  );
+}
+
+================
+File: app/admin/page.tsx
+================
+// app/admin/page.tsx (Server Component)
+import { auth, currentUser } from '@clerk/nextjs/server';
+import { redirect } from 'next/navigation';
+import prisma from '@/lib/prisma'; // Use the Prisma client utility
+import {
+    Table,
+    TableBody,
+    TableCaption, // Optional: Add a caption
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Terminal } from 'lucide-react'; // For Alert icon
+
+// Basic Admin Check (replace with proper role check in production)
+async function isAdmin(userId: string): Promise<boolean> {
+    // In a real app, check Clerk roles/metadata or a flag in your DB
+    // For demo, allow specific user IDs or check email domain from env
+    const adminEmails = (process.env.ADMIN_EMAILS || "").split(',').map(e => e.trim()).filter(e => e);
+    if (adminEmails.length === 0) {
+        console.warn("ADMIN_EMAILS environment variable is not set. No users will be considered admin.");
+        return false;
+    }
+
+    // Fetch user email using Clerk
+    const user = await currentUser();
+    const userEmail = user?.primaryEmailAddress?.emailAddress;
+
+    // Check if the current user matches the calling userId and if their email is in the admin list
+    return user?.id === userId && userEmail ? adminEmails.includes(userEmail) : false;
+}
+
+export default async function AdminPage() {
+    const { userId } = await auth();
+
+    // Authentication & Authorization check
+    if (!userId) {
+        redirect('/sign-in'); // Redirect if not logged in
+    }
+    if (!(await isAdmin(userId))) {
+        // Redirect to homepage or show an unauthorized message if not admin
+        console.warn(`User ${userId} attempted to access admin page without authorization.`);
+        redirect('/');
+    }
+
+    // Fetch users from the database
+    const users = await prisma.user.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: {
+            subscriptions: { // Include subscriptions to show status
+                select: {
+                    status: true,
+                    planType: true, // Include plan type
+                    community: { select: { name: true, slug: true } } // Include community name and slug
+                },
+                orderBy: { community: { name: 'asc' } } // Order subscriptions alphabetically by community name
+            }
+        }
+    });
+
+    return (
+        <div>
+            <h1 className="text-2xl font-bold mb-6">Admin - Platform Users</h1>
+            <Alert className="mb-6">
+                <Terminal className="h-4 w-4" />
+                <AlertTitle>Platform User Overview</AlertTitle>
+                <AlertDescription>
+                    This table lists users registered on the platform via Clerk and synced/created during provisioning.
+                    Future enhancements could include Circle status checks and manual access controls.
+                </AlertDescription>
+            </Alert>
+
+            <div className="border rounded-lg">
+                <Table>
+                    <TableCaption>A list of registered platform users and their community subscriptions.</TableCaption>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-[250px]">Email</TableHead>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Platform Signup</TableHead>
+                            <TableHead>Circle ID</TableHead>
+                            <TableHead className="text-right">Subscriptions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {users.length === 0 && (
+                             <TableRow>
+                                <TableCell colSpan={5} className="text-center text-muted-foreground">No users found.</TableCell>
+                             </TableRow>
+                        )}
+                        {users.map(user => (
+                            <TableRow key={user.id}>
+                                <TableCell className="font-medium">{user.email}</TableCell>
+                                <TableCell>{user.name || '-'}</TableCell>
+                                <TableCell>{user.createdAt.toLocaleDateString()}</TableCell>
+                                <TableCell>{user.circleCommunityMemberId || 'N/A'}</TableCell>
+                                <TableCell className="text-right space-x-1 space-y-1">
+                                    {user.subscriptions.length > 0 ? (
+                                        user.subscriptions.map(sub => (
+                                             <Badge
+                                                key={sub.community.slug}
+                                                variant={sub.status === 'active' ? 'default' : (sub.status === 'provisioning_failed' ? 'destructive' : 'secondary')}
+                                                className="whitespace-nowrap"
+                                             >
+                                                {sub.community.name}: {sub.status} ({sub.planType || 'N/A'})
+                                             </Badge>
+                                        ))
+                                    ) : (
+                                        <Badge variant="outline">None</Badge>
+                                    )}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+            {/* TODO: Add Manual Access Grant/Revoke Forms Here Later */} 
+        </div>
+    );
+}
+
+================
+File: app/api/get-communities/route.ts
+================
+import prisma from '@/lib/prisma';
+import { NextResponse } from 'next/server';
+
+export async function GET() {
+  try {
+    // Fetch only necessary fields for the subscribe page
+    const communities = await prisma.community.findMany({
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        circleSpaceId: true,
+        stripePriceIdMonthly: true,
+        stripePriceIdAnnually: true,
+      }
+    });
+    return NextResponse.json(communities);
+  } catch (error) {
+    console.error("Error fetching communities:", error);
+    return NextResponse.json({ error: 'Failed to fetch communities' }, { status: 500 });
+  }
+}
+
+================
+File: app/cancel/page.tsx
+================
+import Link from 'next/link';
+
+export default function CancelPage() {
+  return (
+    <div className="container mx-auto p-4 text-center">
+      <h1 className="text-2xl font-bold text-orange-600 mb-4">Subscription Canceled</h1>
+      <p>Your subscription process was canceled.</p>
+      <p>You have not been charged.</p>
+      <Link href="/checkout" className="text-blue-500 hover:underline mt-4 block">
+        View Subscription Plans
+      </Link>
+      <Link href="/" className="text-blue-500 hover:underline mt-2 block">
+        Go to Homepage
+      </Link>
+    </div>
+  );
+}
+
+================
+File: app/checkout/page.tsx
+================
+'use client';
+
+import { loadStripe } from '@stripe/stripe-js';
+
+const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+
+if (!stripePublishableKey) {
+  throw new Error('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set in .env');
+}
+
+// Make sure to call `loadStripe` outside of a component's render to avoid
+// recreating the `Stripe` object on every render.
+const stripePromise = loadStripe(stripePublishableKey);
+
+// TODO: Replace with your actual Stripe Price ID
+const SUBSCRIPTION_PRICE_ID = 'price_1234567890';
+
+export default function CheckoutPage() {
+  const handleCheckout = async (priceId: string) => {
+    if (!priceId) {
+      alert('Please select a subscription plan.');
+      return;
+    }
+
+    try {
+      // Create a Checkout Session on the server
+      const response = await fetch('/api/checkout-sessions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ priceId: priceId }), // Send the selected price ID
+      });
+
+      if (!response.ok) {
+        // Handle server errors
+        console.error('Server error:', response.status, await response.text());
+        alert('Failed to create checkout session.');
+        return;
+      }
+
+      const session = await response.json();
+
+      // Redirect to Stripe Checkout
+      const stripe = await stripePromise;
+      if (!stripe) {
+        console.error('Stripe.js has not loaded yet.');
+        alert('Payment system is not ready. Please try again later.');
+        return;
+      }
+
+      const { error } = await stripe.redirectToCheckout({
+        sessionId: session.sessionId,
+      });
+
+      if (error) {
+        console.error('Stripe redirection error:', error);
+        alert(error.message || 'An error occurred during redirection to payment.');
+      }
+    } catch (error) {
+      console.error('Checkout error:', error);
+      alert('An unexpected error occurred.');
+    }
+  };
+
+  return (
+    <div className="container mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-4">Subscribe to our Plan</h1>
+      <div className="border p-4 rounded shadow">
+        <h2 className="text-xl mb-2">Premium Plan</h2>
+        <p className="mb-4">Get access to all premium features.</p>
+        {/* In a real app, you would fetch plans and map over them */}
+        <button
+          type="button"
+          onClick={() => handleCheckout(SUBSCRIPTION_PRICE_ID)}
+          className="bg-purple-600 hover:bg-purple-800 text-white font-bold py-2 px-4 rounded"
+        >
+          Subscribe Now
+        </button>
+      </div>
+    </div>
+  );
+}
+
+================
+File: app/platform-space/[spaceId]/page.tsx
+================
+import { auth, currentUser } from '@clerk/nextjs/server';
+import { redirect } from 'next/navigation';
+import { callCircleHeadlessAuthApi } from '@/lib/circle-auth-api';
+import { callCircleMemberApi } from '@/lib/circle-member-api';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import SpaceContent from './space-content'; // Path might need adjustment
+import { Suspense } from 'react'; // Import Suspense
+
+// --- Simplified Types (Expand as needed based on Circle API response) ---
+interface CircleSpaceDetails {
+    id: number;
+    name: string;
+    slug: string;
+    community_id: number;
+    // Add other relevant fields: description, member_count, etc.
+}
+
+interface CirclePost {
+    id: number;
+    name: string; // Post title
+    body: string; // HTML body
+    body_plain_text?: string;
+    slug: string;
+    user_id: number;
+    space_id: number;
+    created_at: string;
+    // Add other relevant fields: comment_count, like_count, user_name, user_avatar_url, etc.
+}
+
+// Define the expected shape of the auth token response
+interface CircleAuthTokenResponse {
+    access_token: string;
+    refresh_token?: string; // Optional, handle if provided
+    expires_in?: number;
+}
+
+// Define the expected shape of the posts list response
+interface CirclePostListResponse {
+    records: CirclePost[];
+    // Add pagination fields if needed: total_count, per_page, page
+}
+
+/**
+ * Checks if the object is an error with status code.
+ */
+function hasStatusCode(error: unknown): error is { status?: number } {
+    return typeof error === 'object' && error !== null && 'status' in error;
+}
+
+// --- Token Management (DEMO ONLY - NOT FOR PRODUCTION) ---
+// This function is a placeholder for complex, secure token management.
+// It calls the auth API every time, doesn't handle refresh tokens, and has no caching.
+async function getMemberAccessToken(email: string): Promise<string | null> {
+    console.warn("DEMO ONLY: Using direct Headless Auth API call for token. Implement proper token management for production.");
+    try {
+        // This directly calls the Auth API every time
+        const tokenData = await callCircleHeadlessAuthApi<CircleAuthTokenResponse>('auth_token', {
+            method: 'POST',
+            body: { email: email }
+        });
+        // Check if access_token exists in the response
+        if (tokenData && typeof tokenData.access_token === 'string') {
+             return tokenData.access_token;
+        }
+        console.error("Failed to get valid access_token from Circle Auth API response:", tokenData);
+        return null;
+    } catch (error) {
+        console.error("Error calling Circle Headless Auth API:", error);
+        return null;
+    }
+}
+
+// --- Main Server Component --- 
+export default async function PlatformSpacePage({ params }: { params: { spaceId: string } }) {
+    const authObject = await auth(); // Await auth
+    const userId = authObject.userId;
+    const user = await currentUser();
+
+    if (!userId || !user?.primaryEmailAddress?.emailAddress) {
+        console.log('User not authenticated, redirecting to sign-in.');
+        redirect('/sign-in');
+    }
+
+    // Use Number.parseInt for clarity and safety
+    const spaceIdNum = Number.parseInt(params.spaceId, 10);
+    // Use Number.isNaN for type safety
+    if (Number.isNaN(spaceIdNum)) {
+        return (
+            <div className="container mx-auto p-4">
+                <p className="text-red-500">Invalid Space ID provided in the URL.</p>
+                 <Link href="/"><Button variant="outline" className="mt-4">&larr; Back to Communities</Button></Link>
+            </div>
+        );
+    }
+
+    console.log(`Fetching access token for user: ${user.primaryEmailAddress.emailAddress}`);
+    const accessToken = await getMemberAccessToken(user.primaryEmailAddress.emailAddress);
+
+    if (!accessToken) {
+        return (
+            <div className="container mx-auto p-4">
+                 <Link href="/"><Button variant="outline" className="mb-4">&larr; Back to Communities</Button></Link>
+                 <p className="text-red-500">Error: Could not authenticate your session with the community platform. Access denied. Please try again later or contact support.</p>
+            </div>
+       );
+    }
+    console.log('Successfully obtained member access token.');
+
+    // --- Fetch Space Data --- 
+    // Use Suspense for better loading states if fetching takes time
+    // For simplicity here, we await directly
+
+    let spaceDetails: CircleSpaceDetails | null = null;
+    let initialPosts: CirclePost[] = [];
+    let fetchError: string | null = null;
+
+    try {
+        console.log(`Fetching space details for spaceId: ${spaceIdNum}`);
+        // Fetch space details
+        spaceDetails = await callCircleMemberApi<CircleSpaceDetails>(`spaces/${spaceIdNum}`, { accessToken });
+        console.log(`Successfully fetched space details: ${spaceDetails?.name}`);
+
+        console.log(`Fetching posts for spaceId: ${spaceIdNum}`);
+        // Fetch posts (limit for demo)
+        const postData = await callCircleMemberApi<CirclePostListResponse>(`spaces/${spaceIdNum}/posts`, { accessToken, params: { per_page: 10 } });
+        initialPosts = postData?.records || [];
+        console.log(`Successfully fetched ${initialPosts.length} posts.`);
+
+    } catch (error: unknown) {
+        console.error(`Error fetching Circle space data for space ${spaceIdNum}:`, error);
+        fetchError = (error instanceof Error) ? error.message : "Failed to load space content.";
+        // Specific check for 403 Forbidden using type guard
+        if (hasStatusCode(error) && error.status === 403) {
+            fetchError = "Access Denied: You may not have access to this specific community space. Please check your subscription or contact support.";
+        }
+    }
+
+    return (
+        <div className="container mx-auto p-4">
+            <Link href="/"><Button variant="outline" className="mb-4">&larr; Back to Communities</Button></Link>
+
+            {/* Display Loading / Error / Content */} 
+            {fetchError && (
+                <div className="border-l-4 border-red-500 bg-red-50 p-4 mb-6">
+                     <p className="font-semibold text-red-700">Error Loading Community Space</p>
+                     <p className="text-red-600">{fetchError}</p>
+                </div>
+            )}
+
+            {spaceDetails && !fetchError && (
+                <h1 className="text-3xl font-bold mb-6">Welcome to {spaceDetails.name}</h1>
+            )}
+            {!spaceDetails && !fetchError && (
+                <>
+                     <h1 className="text-3xl font-bold mb-6">Loading Community Space...</h1>
+                     {/* Correct JSX Comment Syntax */}
+                     {/* Add a loading spinner/skeleton here */}
+                </>
+            )}
+
+            {/* Pass data to client component for rendering posts */}
+            {/* Only render SpaceContent if there wasn't a fatal fetch error */}
+            {!fetchError && (
+                <Suspense fallback={<p>Loading posts...</p>}> 
+                    <SpaceContent initialPosts={initialPosts} spaceId={spaceIdNum} accessToken={accessToken} />
+                </Suspense>
+            )}
+        </div>
+    );
+}
+
+================
+File: app/platform-space/[spaceId]/space-content.tsx
+================
+'use client';
+
+import { useState } from 'react';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { Button } from '@/components/ui/button'; // Keep import for future use
+
+// --- Simplified Types (Should match the Server Component) ---
+interface CirclePost {
+    id: number;
+    name: string; // Post title
+    body: string; // HTML body - Requires careful rendering (see note below)
+    body_plain_text?: string;
+    slug: string;
+    user_id: number;
+    space_id: number;
+    created_at: string;
+    // Add other relevant fields: comment_count, like_count, user_name, user_avatar_url, etc.
+}
+
+interface SpaceContentProps {
+    initialPosts: CirclePost[];
+    spaceId: number;
+    accessToken: string; // Pass token for potential client-side actions (like posting, commenting)
+}
+
+export default function SpaceContent({ 
+    initialPosts, 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    spaceId, // Keep prop for future use
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    accessToken // Keep prop for future use
+}: SpaceContentProps) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [posts, setPosts] = useState<CirclePost[]>(initialPosts); // Keep setPosts for future
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [isLoading, setIsLoading] = useState(false); 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [error, setError] = useState<string | null>(null); 
+
+    // TODO: Add functions here later for creating posts/comments if needed.
+    // These would call '/api/circle/member/...' wrapper endpoints on your Next.js backend
+    // to securely use the accessToken.
+
+    // WARNING: Rendering post.body directly is unsafe due to potential XSS.
+    // Use a sanitization library (like DOMPurify) or render the plain text version.
+    // For this simple demo, we show plain text.
+
+    return (
+        <div>
+            <h2 className="text-2xl font-semibold mb-4 border-b pb-2">Recent Posts</h2>
+            {isLoading && <p>Loading more posts...</p>} {/* Placeholder for pagination/loading */} 
+            {error && <p className="text-red-500">Error: {error}</p>}
+            {posts.length === 0 && !isLoading && (
+                <p className="text-gray-500 italic">No posts found in this space yet.</p>
+            )}
+            <div className="space-y-4 mt-4">
+                {posts.map(post => (
+                    <Card key={post.id}>
+                        <CardHeader>
+                            {/* TODO: Link to full post view later */}
+                            <CardTitle className="hover:text-blue-600 cursor-pointer">{post.name}</CardTitle>
+                            <CardDescription>
+                                Posted on: {new Date(post.created_at).toLocaleDateString()} 
+                                {/* TODO: Add author name/avatar later */}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {/* Render SANITIZED HTML or plain text */}
+                            <p className="text-sm text-muted-foreground line-clamp-3">
+                                {post.body_plain_text || '(No content preview available)'}
+                            </p>
+                            {/* TODO: Add View Post button later -> /platform-space/[spaceId]/post/[postId] ? */}
+                            {/* <Button variant="link" className="p-0 h-auto mt-2">View Post</Button> */} 
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+            {/* TODO: Add "Create Post" button/form later */}
+            {/* <Button className="mt-6">Create New Post</Button> */} 
+        </div>
+    );
+}
+
+================
+File: app/sign-in/[[...sign-in]]/page.tsx
+================
+import { SignIn } from "@clerk/nextjs";
+
+export default function SignInPage() {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <SignIn 
+        appearance={{
+          elements: {
+            formButtonPrimary: 'bg-primary hover:bg-primary/90',
+            footerActionLink: 'text-primary hover:text-primary/90',
+          }
+        }}
+        routing="path"
+        signUpUrl="/sign-up"
+        redirectUrl="/"
+      />
+    </div>
+  );
+}
+
+================
+File: app/sign-up/[[...sign-up]]/page.tsx
+================
+import { SignUp } from "@clerk/nextjs";
+
+export default function SignUpPage() {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <SignUp 
+        appearance={{
+          elements: {
+            formButtonPrimary: 'bg-primary hover:bg-primary/90',
+            footerActionLink: 'text-primary hover:text-primary/90',
+          }
+        }}
+        routing="path"
+        signInUrl="/sign-in"
+        redirectUrl="/"
+      />
+    </div>
+  );
+}
+
+================
+File: app/subscribe/[communitySlug]/page.tsx
+================
+'use client'; // Needs client-side interaction for Stripe
+
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { toast } from "sonner"; // For notifications
+import { AlertCircle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
+// Interface matching the data from /api/get-communities
+interface CommunitySubscriptionDetails {
+    id: number;
+    name: string;
+    slug: string;
+    description: string | null;
+    circleSpaceId: number;
+    stripePriceIdMonthly: string | null;
+    stripePriceIdAnnually: string | null;
+}
+
+// Fetch community details client-side via our API route
+async function fetchCommunityDetails(slug: string): Promise<CommunitySubscriptionDetails | null> {
+    try {
+        const response = await fetch('/api/get-communities');
+         if (!response.ok) throw new Error('Failed to fetch communities list');
+         const communities: CommunitySubscriptionDetails[] = await response.json();
+         const community = communities.find(c => c.slug === slug);
+         if (!community) {
+             console.warn(`Community with slug '${slug}' not found in fetched list.`);
+             return null;
+         }
+         return community;
+
+    } catch (error) {
+        console.error("Error fetching community details:", error);
+        toast.error(`Failed to load community details: ${(error as Error).message}`);
+        return null;
+    }
+}
+
+export default function SubscribePage() {
+    const params = useParams();
+    const router = useRouter();
+    const communitySlug = params.communitySlug as string;
+    const [community, setCommunity] = useState<CommunitySubscriptionDetails | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null); // 'monthly' | 'annual' | null
+
+    useEffect(() => {
+        if (communitySlug) {
+            setLoading(true);
+            fetchCommunityDetails(communitySlug)
+                .then(data => {
+                    if (!data) {
+                        toast.error("Community not found or not configured for subscriptions.");
+                        // Consider redirecting or showing a persistent error state
+                    }
+                    setCommunity(data);
+                })
+                // Catch is handled within fetchCommunityDetails
+                .finally(() => setLoading(false));
+        }
+    }, [communitySlug]);
+
+    const handleCheckout = async (priceId: string | null | undefined, planType: 'monthly' | 'annual') => {
+        if (!priceId) {
+            toast.error(`No ${planType} price configured for this community.`);
+            return;
+        }
+        if (!community) return; // Should not happen if button is visible
+
+        setCheckoutLoading(planType);
+        toast.info("Redirecting to payment gateway...");
+
+        try {
+            const response = await fetch('/api/checkout-sessions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    priceId: priceId,
+                    communitySlug: community.slug,
+                    communityName: community.name,
+                    planType: planType,
+                    circleSpaceId: community.circleSpaceId,
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                let friendlyMessage = errorData.error || 'Failed to create checkout session.';
+                if (response.status === 401) {
+                    friendlyMessage = 'Please sign in to subscribe.';
+                }
+                throw new Error(friendlyMessage);
+            }
+
+            // Expecting { success: true, data: { checkoutUrl: string } } from API
+            const sessionResponse = await response.json(); 
+
+            if (!sessionResponse.success || !sessionResponse.data?.checkoutUrl) {
+                 throw new Error(sessionResponse.error || 'Checkout session URL not received.');
+            }
+
+            // Redirect to Stripe Checkout using the URL from the backend
+            router.push(sessionResponse.data.checkoutUrl); // Use checkoutUrl
+
+        } catch (error) {
+            console.error('Checkout error:', error);
+            toast.error(`Checkout failed: ${(error as Error).message}`);
+            setCheckoutLoading(null);
+        }
+    };
+
+    if (loading) return <div className="container mx-auto p-4 text-center"><p>Loading community details...</p></div>;
+    
+    if (!community) return (
+        <div className="container mx-auto p-4 text-center">
+             <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Community Not Found</AlertTitle>
+                <AlertDescription>The community you are looking for could not be found or is not available for subscription.</AlertDescription>
+             </Alert>
+        </div>
+    );
+
+    return (
+        <div className="container mx-auto p-4">
+            <h1 className="text-3xl font-bold mb-4">Subscribe to {community.name}</h1>
+            <p className="text-muted-foreground mb-6">{community.description || 'Join our community!'}</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Monthly Plan Card */} 
+                <Card className={!community.stripePriceIdMonthly ? "opacity-50 pointer-events-none" : ""}>
+                    <CardHeader>
+                        <CardTitle>Monthly Plan</CardTitle>
+                        <CardDescription>Access all content on a monthly basis.</CardDescription>
+                        <p className="text-2xl font-semibold pt-2">{community.stripePriceIdMonthly ? "$XX / month" : "Not Available"}</p> 
+                    </CardHeader>
+                    <CardContent>
+                        <Button
+                            className="w-full"
+                            onClick={() => handleCheckout(community.stripePriceIdMonthly, 'monthly')}
+                            disabled={!!checkoutLoading || !community.stripePriceIdMonthly}
+                        >
+                            {checkoutLoading === 'monthly' ? 'Processing...' : 'Subscribe Monthly'}
+                        </Button>
+                    </CardContent>
+                </Card>
+
+                {/* Annual Plan Card */} 
+                <Card className={!community.stripePriceIdAnnually ? "opacity-50 pointer-events-none" : ""}>
+                    <CardHeader>
+                        <CardTitle>Annual Plan</CardTitle>
+                        <CardDescription>Save money with an annual subscription.</CardDescription>
+                        <p className="text-2xl font-semibold pt-2">{community.stripePriceIdAnnually ? "$YY / year" : "Not Available"}</p> 
+                    </CardHeader>
+                    <CardContent>
+                         <Button
+                            className="w-full"
+                            onClick={() => handleCheckout(community.stripePriceIdAnnually, 'annual')}
+                            disabled={!!checkoutLoading || !community.stripePriceIdAnnually}
+                        >
+                            {checkoutLoading === 'annual' ? 'Processing...' : 'Subscribe Annually'}
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+             {/* TODO: Add Discount Code Input later */} 
+        </div>
+    );
+}
+
+================
+File: app/success/page.tsx
+================
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+
+export default function SuccessPage() {
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get('session_id');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [customerEmail, setCustomerEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionId) {
+      setError('No session ID found in the URL.');
+      setIsLoading(false);
+      return;
+    }
+
+    const verifySession = async () => {
+      try {
+        // Optional: Verify session status on the backend
+        // In a real app, you might want to fetch session details from your server
+        // to confirm payment and potentially update user status in your DB.
+        // For this basic example, we'll just show a success message.
+        console.log('Stripe Checkout Session ID:', sessionId);
+        // Fake loading state for demo
+        await new Promise(resolve => setTimeout(resolve, 500)); 
+        setCustomerEmail('example@email.com'); // Placeholder
+      } catch (err) {
+        console.error('Error verifying session:', err);
+        setError('Failed to verify subscription status.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    verifySession();
+  }, [sessionId]);
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-4 text-center">
+        <p>Verifying your subscription...</p>
+        {/* Add a loading spinner here if desired */}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto p-4 text-center text-red-600">
+        <h1 className="text-2xl font-bold mb-4">Subscription Error</h1>
+        <p>{error}</p>
+        <Link href="/checkout" className="text-blue-500 hover:underline mt-4 block">
+          Try subscribing again
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto p-4 text-center">
+      <h1 className="text-2xl font-bold text-green-600 mb-4">Subscription Successful!</h1>
+      <p>Thank you for subscribing!</p>
+      {customerEmail && <p>A confirmation has been sent to {customerEmail}.</p>}
+      <p className="mt-2">Your Session ID: <code className="bg-gray-200 p-1 rounded text-sm">{sessionId}</code></p>
+      <Link href="/" className="text-blue-500 hover:underline mt-4 block">
+        Go to Homepage
+      </Link>
+    </div>
+  );
+}
+
+================
+File: components/ui/alert.tsx
+================
+import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const alertVariants = cva(
+  "relative w-full rounded-lg border px-4 py-3 text-sm grid has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] grid-cols-[0_1fr] has-[>svg]:gap-x-3 gap-y-0.5 items-start [&>svg]:size-4 [&>svg]:translate-y-0.5 [&>svg]:text-current",
+  {
+    variants: {
+      variant: {
+        default: "bg-card text-card-foreground",
+        destructive:
+          "text-destructive bg-card [&>svg]:text-current *:data-[slot=alert-description]:text-destructive/90",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
+
+function Alert({
+  className,
+  variant,
+  ...props
+}: React.ComponentProps<"div"> & VariantProps<typeof alertVariants>) {
+  return (
+    <div
+      data-slot="alert"
+      role="alert"
+      className={cn(alertVariants({ variant }), className)}
+      {...props}
+    />
+  )
+}
+
+function AlertTitle({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="alert-title"
+      className={cn(
+        "col-start-2 line-clamp-1 min-h-4 font-medium tracking-tight",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function AlertDescription({
+  className,
+  ...props
+}: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="alert-description"
+      className={cn(
+        "text-muted-foreground col-start-2 grid justify-items-start gap-1 text-sm [&_p]:leading-relaxed",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+export { Alert, AlertTitle, AlertDescription }
+
+================
+File: components/ui/avatar.tsx
+================
+"use client"
+
+import * as React from "react"
+import * as AvatarPrimitive from "@radix-ui/react-avatar"
+
+import { cn } from "@/lib/utils"
+
+function Avatar({
+  className,
+  ...props
+}: React.ComponentProps<typeof AvatarPrimitive.Root>) {
+  return (
+    <AvatarPrimitive.Root
+      data-slot="avatar"
+      className={cn(
+        "relative flex size-8 shrink-0 overflow-hidden rounded-full",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function AvatarImage({
+  className,
+  ...props
+}: React.ComponentProps<typeof AvatarPrimitive.Image>) {
+  return (
+    <AvatarPrimitive.Image
+      data-slot="avatar-image"
+      className={cn("aspect-square size-full", className)}
+      {...props}
+    />
+  )
+}
+
+function AvatarFallback({
+  className,
+  ...props
+}: React.ComponentProps<typeof AvatarPrimitive.Fallback>) {
+  return (
+    <AvatarPrimitive.Fallback
+      data-slot="avatar-fallback"
+      className={cn(
+        "bg-muted flex size-full items-center justify-center rounded-full",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+export { Avatar, AvatarImage, AvatarFallback }
+
+================
+File: components/ui/badge.tsx
+================
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const badgeVariants = cva(
+  "inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive transition-[color,box-shadow] overflow-hidden",
+  {
+    variants: {
+      variant: {
+        default:
+          "border-transparent bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
+        secondary:
+          "border-transparent bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
+        destructive:
+          "border-transparent bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+        outline:
+          "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
+
+function Badge({
+  className,
+  variant,
+  asChild = false,
+  ...props
+}: React.ComponentProps<"span"> &
+  VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
+  const Comp = asChild ? Slot : "span"
+
+  return (
+    <Comp
+      data-slot="badge"
+      className={cn(badgeVariants({ variant }), className)}
+      {...props}
+    />
+  )
+}
+
+export { Badge, badgeVariants }
+
+================
+File: components/ui/button.tsx
+================
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+  {
+    variants: {
+      variant: {
+        default:
+          "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
+        destructive:
+          "bg-destructive text-white shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+        outline:
+          "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50",
+        secondary:
+          "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
+        ghost:
+          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-9 px-4 py-2 has-[>svg]:px-3",
+        sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
+        lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
+        icon: "size-9",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+)
+
+function Button({
+  className,
+  variant,
+  size,
+  asChild = false,
+  ...props
+}: React.ComponentProps<"button"> &
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean
+  }) {
+  const Comp = asChild ? Slot : "button"
+
+  return (
+    <Comp
+      data-slot="button"
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    />
+  )
+}
+
+export { Button, buttonVariants }
+
+================
+File: components/ui/card.tsx
+================
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+function Card({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="card"
+      className={cn(
+        "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="card-header"
+      className={cn(
+        "@container/card-header grid auto-rows-min grid-rows-[auto_auto] items-start gap-1.5 px-6 has-data-[slot=card-action]:grid-cols-[1fr_auto] [.border-b]:pb-6",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="card-title"
+      className={cn("leading-none font-semibold", className)}
+      {...props}
+    />
+  )
+}
+
+function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="card-description"
+      className={cn("text-muted-foreground text-sm", className)}
+      {...props}
+    />
+  )
+}
+
+function CardAction({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="card-action"
+      className={cn(
+        "col-start-2 row-span-2 row-start-1 self-start justify-self-end",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function CardContent({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="card-content"
+      className={cn("px-6", className)}
+      {...props}
+    />
+  )
+}
+
+function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="card-footer"
+      className={cn("flex items-center px-6 [.border-t]:pt-6", className)}
+      {...props}
+    />
+  )
+}
+
+export {
+  Card,
+  CardHeader,
+  CardFooter,
+  CardTitle,
+  CardAction,
+  CardDescription,
+  CardContent,
+}
+
+================
+File: components/ui/dropdown-menu.tsx
+================
+"use client"
+
+import * as React from "react"
+import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
+import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+
+function DropdownMenu({
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
+  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />
+}
+
+function DropdownMenuPortal({
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
+  return (
+    <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
+  )
+}
+
+function DropdownMenuTrigger({
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
+  return (
+    <DropdownMenuPrimitive.Trigger
+      data-slot="dropdown-menu-trigger"
+      {...props}
+    />
+  )
+}
+
+function DropdownMenuContent({
+  className,
+  sideOffset = 4,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+  return (
+    <DropdownMenuPrimitive.Portal>
+      <DropdownMenuPrimitive.Content
+        data-slot="dropdown-menu-content"
+        sideOffset={sideOffset}
+        className={cn(
+          "bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md",
+          className
+        )}
+        {...props}
+      />
+    </DropdownMenuPrimitive.Portal>
+  )
+}
+
+function DropdownMenuGroup({
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Group>) {
+  return (
+    <DropdownMenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />
+  )
+}
+
+function DropdownMenuItem({
+  className,
+  inset,
+  variant = "default",
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Item> & {
+  inset?: boolean
+  variant?: "default" | "destructive"
+}) {
+  return (
+    <DropdownMenuPrimitive.Item
+      data-slot="dropdown-menu-item"
+      data-inset={inset}
+      data-variant={variant}
+      className={cn(
+        "focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:*:[svg]:!text-destructive [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function DropdownMenuCheckboxItem({
+  className,
+  children,
+  checked,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>) {
+  return (
+    <DropdownMenuPrimitive.CheckboxItem
+      data-slot="dropdown-menu-checkbox-item"
+      className={cn(
+        "focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        className
+      )}
+      checked={checked}
+      {...props}
+    >
+      <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
+        <DropdownMenuPrimitive.ItemIndicator>
+          <CheckIcon className="size-4" />
+        </DropdownMenuPrimitive.ItemIndicator>
+      </span>
+      {children}
+    </DropdownMenuPrimitive.CheckboxItem>
+  )
+}
+
+function DropdownMenuRadioGroup({
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>) {
+  return (
+    <DropdownMenuPrimitive.RadioGroup
+      data-slot="dropdown-menu-radio-group"
+      {...props}
+    />
+  )
+}
+
+function DropdownMenuRadioItem({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
+  return (
+    <DropdownMenuPrimitive.RadioItem
+      data-slot="dropdown-menu-radio-item"
+      className={cn(
+        "focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        className
+      )}
+      {...props}
+    >
+      <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
+        <DropdownMenuPrimitive.ItemIndicator>
+          <CircleIcon className="size-2 fill-current" />
+        </DropdownMenuPrimitive.ItemIndicator>
+      </span>
+      {children}
+    </DropdownMenuPrimitive.RadioItem>
+  )
+}
+
+function DropdownMenuLabel({
+  className,
+  inset,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Label> & {
+  inset?: boolean
+}) {
+  return (
+    <DropdownMenuPrimitive.Label
+      data-slot="dropdown-menu-label"
+      data-inset={inset}
+      className={cn(
+        "px-2 py-1.5 text-sm font-medium data-[inset]:pl-8",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function DropdownMenuSeparator({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
+  return (
+    <DropdownMenuPrimitive.Separator
+      data-slot="dropdown-menu-separator"
+      className={cn("bg-border -mx-1 my-1 h-px", className)}
+      {...props}
+    />
+  )
+}
+
+function DropdownMenuShortcut({
+  className,
+  ...props
+}: React.ComponentProps<"span">) {
+  return (
+    <span
+      data-slot="dropdown-menu-shortcut"
+      className={cn(
+        "text-muted-foreground ml-auto text-xs tracking-widest",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function DropdownMenuSub({
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>) {
+  return <DropdownMenuPrimitive.Sub data-slot="dropdown-menu-sub" {...props} />
+}
+
+function DropdownMenuSubTrigger({
+  className,
+  inset,
+  children,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger> & {
+  inset?: boolean
+}) {
+  return (
+    <DropdownMenuPrimitive.SubTrigger
+      data-slot="dropdown-menu-sub-trigger"
+      data-inset={inset}
+      className={cn(
+        "focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-[inset]:pl-8",
+        className
+      )}
+      {...props}
+    >
+      {children}
+      <ChevronRightIcon className="ml-auto size-4" />
+    </DropdownMenuPrimitive.SubTrigger>
+  )
+}
+
+function DropdownMenuSubContent({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
+  return (
+    <DropdownMenuPrimitive.SubContent
+      data-slot="dropdown-menu-sub-content"
+      className={cn(
+        "bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-hidden rounded-md border p-1 shadow-lg",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+export {
+  DropdownMenu,
+  DropdownMenuPortal,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+}
+
+================
+File: components/ui/input.tsx
+================
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+  return (
+    <input
+      type={type}
+      data-slot="input"
+      className={cn(
+        "file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input flex h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+        "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+        "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+export { Input }
+
+================
+File: components/ui/label.tsx
+================
+"use client"
+
+import * as React from "react"
+import * as LabelPrimitive from "@radix-ui/react-label"
+
+import { cn } from "@/lib/utils"
+
+function Label({
+  className,
+  ...props
+}: React.ComponentProps<typeof LabelPrimitive.Root>) {
+  return (
+    <LabelPrimitive.Root
+      data-slot="label"
+      className={cn(
+        "flex items-center gap-2 text-sm leading-none font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+export { Label }
+
+================
+File: components/ui/navigation-menu.tsx
+================
+import * as React from "react"
+import * as NavigationMenuPrimitive from "@radix-ui/react-navigation-menu"
+import { cva } from "class-variance-authority"
+import { ChevronDownIcon } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+
+function NavigationMenu({
+  className,
+  children,
+  viewport = true,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.Root> & {
+  viewport?: boolean
+}) {
+  return (
+    <NavigationMenuPrimitive.Root
+      data-slot="navigation-menu"
+      data-viewport={viewport}
+      className={cn(
+        "group/navigation-menu relative flex max-w-max flex-1 items-center justify-center",
+        className
+      )}
+      {...props}
+    >
+      {children}
+      {viewport && <NavigationMenuViewport />}
+    </NavigationMenuPrimitive.Root>
+  )
+}
+
+function NavigationMenuList({
+  className,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.List>) {
+  return (
+    <NavigationMenuPrimitive.List
+      data-slot="navigation-menu-list"
+      className={cn(
+        "group flex flex-1 list-none items-center justify-center gap-1",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function NavigationMenuItem({
+  className,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.Item>) {
+  return (
+    <NavigationMenuPrimitive.Item
+      data-slot="navigation-menu-item"
+      className={cn("relative", className)}
+      {...props}
+    />
+  )
+}
+
+const navigationMenuTriggerStyle = cva(
+  "group inline-flex h-9 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50 data-[state=open]:hover:bg-accent data-[state=open]:text-accent-foreground data-[state=open]:focus:bg-accent data-[state=open]:bg-accent/50 focus-visible:ring-ring/50 outline-none transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:outline-1"
+)
+
+function NavigationMenuTrigger({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.Trigger>) {
+  return (
+    <NavigationMenuPrimitive.Trigger
+      data-slot="navigation-menu-trigger"
+      className={cn(navigationMenuTriggerStyle(), "group", className)}
+      {...props}
+    >
+      {children}{" "}
+      <ChevronDownIcon
+        className="relative top-[1px] ml-1 size-3 transition duration-300 group-data-[state=open]:rotate-180"
+        aria-hidden="true"
+      />
+    </NavigationMenuPrimitive.Trigger>
+  )
+}
+
+function NavigationMenuContent({
+  className,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.Content>) {
+  return (
+    <NavigationMenuPrimitive.Content
+      data-slot="navigation-menu-content"
+      className={cn(
+        "data-[motion^=from-]:animate-in data-[motion^=to-]:animate-out data-[motion^=from-]:fade-in data-[motion^=to-]:fade-out data-[motion=from-end]:slide-in-from-right-52 data-[motion=from-start]:slide-in-from-left-52 data-[motion=to-end]:slide-out-to-right-52 data-[motion=to-start]:slide-out-to-left-52 top-0 left-0 w-full p-2 pr-2.5 md:absolute md:w-auto",
+        "group-data-[viewport=false]/navigation-menu:bg-popover group-data-[viewport=false]/navigation-menu:text-popover-foreground group-data-[viewport=false]/navigation-menu:data-[state=open]:animate-in group-data-[viewport=false]/navigation-menu:data-[state=closed]:animate-out group-data-[viewport=false]/navigation-menu:data-[state=closed]:zoom-out-95 group-data-[viewport=false]/navigation-menu:data-[state=open]:zoom-in-95 group-data-[viewport=false]/navigation-menu:data-[state=open]:fade-in-0 group-data-[viewport=false]/navigation-menu:data-[state=closed]:fade-out-0 group-data-[viewport=false]/navigation-menu:top-full group-data-[viewport=false]/navigation-menu:mt-1.5 group-data-[viewport=false]/navigation-menu:overflow-hidden group-data-[viewport=false]/navigation-menu:rounded-md group-data-[viewport=false]/navigation-menu:border group-data-[viewport=false]/navigation-menu:shadow group-data-[viewport=false]/navigation-menu:duration-200 **:data-[slot=navigation-menu-link]:focus:ring-0 **:data-[slot=navigation-menu-link]:focus:outline-none",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function NavigationMenuViewport({
+  className,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.Viewport>) {
+  return (
+    <div
+      className={cn(
+        "absolute top-full left-0 isolate z-50 flex justify-center"
+      )}
+    >
+      <NavigationMenuPrimitive.Viewport
+        data-slot="navigation-menu-viewport"
+        className={cn(
+          "origin-top-center bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-90 relative mt-1.5 h-[var(--radix-navigation-menu-viewport-height)] w-full overflow-hidden rounded-md border shadow md:w-[var(--radix-navigation-menu-viewport-width)]",
+          className
+        )}
+        {...props}
+      />
+    </div>
+  )
+}
+
+function NavigationMenuLink({
+  className,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.Link>) {
+  return (
+    <NavigationMenuPrimitive.Link
+      data-slot="navigation-menu-link"
+      className={cn(
+        "data-[active=true]:focus:bg-accent data-[active=true]:hover:bg-accent data-[active=true]:bg-accent/50 data-[active=true]:text-accent-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus-visible:ring-ring/50 [&_svg:not([class*='text-'])]:text-muted-foreground flex flex-col gap-1 rounded-sm p-2 text-sm transition-all outline-none focus-visible:ring-[3px] focus-visible:outline-1 [&_svg:not([class*='size-'])]:size-4",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function NavigationMenuIndicator({
+  className,
+  ...props
+}: React.ComponentProps<typeof NavigationMenuPrimitive.Indicator>) {
+  return (
+    <NavigationMenuPrimitive.Indicator
+      data-slot="navigation-menu-indicator"
+      className={cn(
+        "data-[state=visible]:animate-in data-[state=hidden]:animate-out data-[state=hidden]:fade-out data-[state=visible]:fade-in top-full z-[1] flex h-1.5 items-end justify-center overflow-hidden",
+        className
+      )}
+      {...props}
+    >
+      <div className="bg-border relative top-[60%] h-2 w-2 rotate-45 rounded-tl-sm shadow-md" />
+    </NavigationMenuPrimitive.Indicator>
+  )
+}
+
+export {
+  NavigationMenu,
+  NavigationMenuList,
+  NavigationMenuItem,
+  NavigationMenuContent,
+  NavigationMenuTrigger,
+  NavigationMenuLink,
+  NavigationMenuIndicator,
+  NavigationMenuViewport,
+  navigationMenuTriggerStyle,
+}
+
+================
+File: components/ui/sheet.tsx
+================
+"use client"
+
+import * as React from "react"
+import * as SheetPrimitive from "@radix-ui/react-dialog"
+import { XIcon } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+
+function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
+  return <SheetPrimitive.Root data-slot="sheet" {...props} />
+}
+
+function SheetTrigger({
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Trigger>) {
+  return <SheetPrimitive.Trigger data-slot="sheet-trigger" {...props} />
+}
+
+function SheetClose({
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Close>) {
+  return <SheetPrimitive.Close data-slot="sheet-close" {...props} />
+}
+
+function SheetPortal({
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Portal>) {
+  return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />
+}
+
+function SheetOverlay({
+  className,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
+  return (
+    <SheetPrimitive.Overlay
+      data-slot="sheet-overlay"
+      className={cn(
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function SheetContent({
+  className,
+  children,
+  side = "right",
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Content> & {
+  side?: "top" | "right" | "bottom" | "left"
+}) {
+  return (
+    <SheetPortal>
+      <SheetOverlay />
+      <SheetPrimitive.Content
+        data-slot="sheet-content"
+        className={cn(
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
+          side === "right" &&
+            "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm",
+          side === "left" &&
+            "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full w-3/4 border-r sm:max-w-sm",
+          side === "top" &&
+            "data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 h-auto border-b",
+          side === "bottom" &&
+            "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto border-t",
+          className
+        )}
+        {...props}
+      >
+        {children}
+        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
+          <XIcon className="size-4" />
+          <span className="sr-only">Close</span>
+        </SheetPrimitive.Close>
+      </SheetPrimitive.Content>
+    </SheetPortal>
+  )
+}
+
+function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="sheet-header"
+      className={cn("flex flex-col gap-1.5 p-4", className)}
+      {...props}
+    />
+  )
+}
+
+function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="sheet-footer"
+      className={cn("mt-auto flex flex-col gap-2 p-4", className)}
+      {...props}
+    />
+  )
+}
+
+function SheetTitle({
+  className,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Title>) {
+  return (
+    <SheetPrimitive.Title
+      data-slot="sheet-title"
+      className={cn("text-foreground font-semibold", className)}
+      {...props}
+    />
+  )
+}
+
+function SheetDescription({
+  className,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Description>) {
+  return (
+    <SheetPrimitive.Description
+      data-slot="sheet-description"
+      className={cn("text-muted-foreground text-sm", className)}
+      {...props}
+    />
+  )
+}
+
+export {
+  Sheet,
+  SheetTrigger,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetFooter,
+  SheetTitle,
+  SheetDescription,
+}
+
+================
+File: components/ui/skeleton.tsx
+================
+import { cn } from "@/lib/utils"
+
+function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="skeleton"
+      className={cn("bg-accent animate-pulse rounded-md", className)}
+      {...props}
+    />
+  )
+}
+
+export { Skeleton }
+
+================
+File: components/ui/sonner.tsx
+================
+"use client"
+
+import { useTheme } from "next-themes"
+import { Toaster as Sonner, ToasterProps } from "sonner"
+
+const Toaster = ({ ...props }: ToasterProps) => {
+  const { theme = "system" } = useTheme()
+
+  return (
+    <Sonner
+      theme={theme as ToasterProps["theme"]}
+      className="toaster group"
+      style={
+        {
+          "--normal-bg": "var(--popover)",
+          "--normal-text": "var(--popover-foreground)",
+          "--normal-border": "var(--border)",
+        } as React.CSSProperties
+      }
+      {...props}
+    />
+  )
+}
+
+export { Toaster }
+
+================
+File: components/ui/table.tsx
+================
+"use client"
+
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+function Table({ className, ...props }: React.ComponentProps<"table">) {
+  return (
+    <div
+      data-slot="table-container"
+      className="relative w-full overflow-x-auto"
+    >
+      <table
+        data-slot="table"
+        className={cn("w-full caption-bottom text-sm", className)}
+        {...props}
+      />
+    </div>
+  )
+}
+
+function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
+  return (
+    <thead
+      data-slot="table-header"
+      className={cn("[&_tr]:border-b", className)}
+      {...props}
+    />
+  )
+}
+
+function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
+  return (
+    <tbody
+      data-slot="table-body"
+      className={cn("[&_tr:last-child]:border-0", className)}
+      {...props}
+    />
+  )
+}
+
+function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
+  return (
+    <tfoot
+      data-slot="table-footer"
+      className={cn(
+        "bg-muted/50 border-t font-medium [&>tr]:last:border-b-0",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
+  return (
+    <tr
+      data-slot="table-row"
+      className={cn(
+        "hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+  return (
+    <th
+      data-slot="table-head"
+      className={cn(
+        "text-foreground h-10 px-2 text-left align-middle font-medium whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function TableCell({ className, ...props }: React.ComponentProps<"td">) {
+  return (
+    <td
+      data-slot="table-cell"
+      className={cn(
+        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function TableCaption({
+  className,
+  ...props
+}: React.ComponentProps<"caption">) {
+  return (
+    <caption
+      data-slot="table-caption"
+      className={cn("text-muted-foreground mt-4 text-sm", className)}
+      {...props}
+    />
+  )
+}
+
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableCaption,
+}
+
+================
+File: lib/utils.ts
+================
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+================
+File: prisma/migrations/20250414100340_initial_schema/migration.sql
+================
+-- CreateTable
+CREATE TABLE "User" (
+    "id" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "name" TEXT,
+    "circleCommunityMemberId" INTEGER,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Community" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "slug" TEXT NOT NULL,
+    "description" TEXT,
+    "imageUrl" TEXT,
+    "circleSpaceId" INTEGER NOT NULL,
+    "stripePriceIdMonthly" TEXT,
+    "stripePriceIdAnnually" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Community_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Subscription" (
+    "id" SERIAL NOT NULL,
+    "userId" TEXT NOT NULL,
+    "communityId" INTEGER NOT NULL,
+    "status" TEXT NOT NULL,
+    "stripeSubscriptionId" TEXT,
+    "stripeCustomerId" TEXT,
+    "planType" TEXT,
+    "startDate" TIMESTAMP(3),
+    "endDate" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Subscription_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "User_circleCommunityMemberId_key" ON "User"("circleCommunityMemberId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Community_slug_key" ON "Community"("slug");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Community_circleSpaceId_key" ON "Community"("circleSpaceId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Subscription_stripeSubscriptionId_key" ON "Subscription"("stripeSubscriptionId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Subscription_userId_communityId_key" ON "Subscription"("userId", "communityId");
+
+-- AddForeignKey
+ALTER TABLE "Subscription" ADD CONSTRAINT "Subscription_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Subscription" ADD CONSTRAINT "Subscription_communityId_fkey" FOREIGN KEY ("communityId") REFERENCES "Community"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+================
+File: prisma/migrations/migration_lock.toml
+================
+# Please do not edit this file manually
+# It should be added in your version-control system (e.g., Git)
+provider = "postgresql"
+
+================
+File: public/file.svg
+================
+<svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.5V5.41a1 1 0 0 0-.3-.7L9.8.29A1 1 0 0 0 9.08 0H1.5v13.5A2.5 2.5 0 0 0 4 16h8a2.5 2.5 0 0 0 2.5-2.5m-1.5 0v-7H8v-5H3v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1M9.5 5V2.12L12.38 5zM5.13 5h-.62v1.25h2.12V5zm-.62 3h7.12v1.25H4.5zm.62 3h-.62v1.25h7.12V11z" clip-rule="evenodd" fill="#666" fill-rule="evenodd"/></svg>
+
+================
+File: public/globe.svg
+================
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g clip-path="url(#a)"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.27 14.1a6.5 6.5 0 0 0 3.67-3.45q-1.24.21-2.7.34-.31 1.83-.97 3.1M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.48-1.52a7 7 0 0 1-.96 0H7.5a4 4 0 0 1-.84-1.32q-.38-.89-.63-2.08a40 40 0 0 0 3.92 0q-.25 1.2-.63 2.08a4 4 0 0 1-.84 1.31zm2.94-4.76q1.66-.15 2.95-.43a7 7 0 0 0 0-2.58q-1.3-.27-2.95-.43a18 18 0 0 1 0 3.44m-1.27-3.54a17 17 0 0 1 0 3.64 39 39 0 0 1-4.3 0 17 17 0 0 1 0-3.64 39 39 0 0 1 4.3 0m1.1-1.17q1.45.13 2.69.34a6.5 6.5 0 0 0-3.67-3.44q.65 1.26.98 3.1M8.48 1.5l.01.02q.41.37.84 1.31.38.89.63 2.08a40 40 0 0 0-3.92 0q.25-1.2.63-2.08a4 4 0 0 1 .85-1.32 7 7 0 0 1 .96 0m-2.75.4a6.5 6.5 0 0 0-3.67 3.44 29 29 0 0 1 2.7-.34q.31-1.83.97-3.1M4.58 6.28q-1.66.16-2.95.43a7 7 0 0 0 0 2.58q1.3.27 2.95.43a18 18 0 0 1 0-3.44m.17 4.71q-1.45-.12-2.69-.34a6.5 6.5 0 0 0 3.67 3.44q-.65-1.27-.98-3.1" fill="#666"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h16v16H0z"/></clipPath></defs></svg>
+
+================
+File: public/next.svg
+================
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 394 80"><path fill="#000" d="M262 0h68.5v12.7h-27.2v66.6h-13.6V12.7H262V0ZM149 0v12.7H94v20.4h44.3v12.6H94v21h55v12.6H80.5V0h68.7zm34.3 0h-17.8l63.8 79.4h17.9l-32-39.7 32-39.6h-17.9l-23 28.6-23-28.6zm18.3 56.7-9-11-27.1 33.7h17.8l18.3-22.7z"/><path fill="#000" d="M81 79.3 17 0H0v79.3h13.6V17l50.2 62.3H81Zm252.6-.4c-1 0-1.8-.4-2.5-1s-1.1-1.6-1.1-2.6.3-1.8 1-2.5 1.6-1 2.6-1 1.8.3 2.5 1a3.4 3.4 0 0 1 .6 4.3 3.7 3.7 0 0 1-3 1.8zm23.2-33.5h6v23.3c0 2.1-.4 4-1.3 5.5a9.1 9.1 0 0 1-3.8 3.5c-1.6.8-3.5 1.3-5.7 1.3-2 0-3.7-.4-5.3-1s-2.8-1.8-3.7-3.2c-.9-1.3-1.4-3-1.4-5h6c.1.8.3 1.6.7 2.2s1 1.2 1.6 1.5c.7.4 1.5.5 2.4.5 1 0 1.8-.2 2.4-.6a4 4 0 0 0 1.6-1.8c.3-.8.5-1.8.5-3V45.5zm30.9 9.1a4.4 4.4 0 0 0-2-3.3 7.5 7.5 0 0 0-4.3-1.1c-1.3 0-2.4.2-3.3.5-.9.4-1.6 1-2 1.6a3.5 3.5 0 0 0-.3 4c.3.5.7.9 1.3 1.2l1.8 1 2 .5 3.2.8c1.3.3 2.5.7 3.7 1.2a13 13 0 0 1 3.2 1.8 8.1 8.1 0 0 1 3 6.5c0 2-.5 3.7-1.5 5.1a10 10 0 0 1-4.4 3.5c-1.8.8-4.1 1.2-6.8 1.2-2.6 0-4.9-.4-6.8-1.2-2-.8-3.4-2-4.5-3.5a10 10 0 0 1-1.7-5.6h6a5 5 0 0 0 3.5 4.6c1 .4 2.2.6 3.4.6 1.3 0 2.5-.2 3.5-.6 1-.4 1.8-1 2.4-1.7a4 4 0 0 0 .8-2.4c0-.9-.2-1.6-.7-2.2a11 11 0 0 0-2.1-1.4l-3.2-1-3.8-1c-2.8-.7-5-1.7-6.6-3.2a7.2 7.2 0 0 1-2.4-5.7 8 8 0 0 1 1.7-5 10 10 0 0 1 4.3-3.5c2-.8 4-1.2 6.4-1.2 2.3 0 4.4.4 6.2 1.2 1.8.8 3.2 2 4.3 3.4 1 1.4 1.5 3 1.5 5h-5.8z"/></svg>
+
+================
+File: public/vercel.svg
+================
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000"><path d="m577.3 0 577.4 1000H0z" fill="#fff"/></svg>
+
+================
+File: public/window.svg
+================
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
+
+================
+File: types/index.ts
+================
+/**
+ * Generic type for standardized API responses.
+ * @template T - The type of the data payload on success.
+ */
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  details?: unknown; // For optional detailed error info
+}
+
+/**
+ * Data returned on successful Stripe Checkout Session creation.
+ */
+export interface CheckoutSessionData {
+  sessionId?: string; // Optional: Keep sessionId if used elsewhere
+  checkoutUrl: string; // Add the missing checkoutUrl property
+}
+
+// Add other shared types below
+// export type CommunityData = { ... };
+
+================
+File: .eslintrc.js
+================
+module.exports = {
+  // Extend Next.js config
+  extends: ['next/core-web-vitals'],
+  
+  // Set root to true to avoid ESLint searching parent directories
+  root: true,
+  
+  // Ignore patterns (these should take precedence over .eslintignore)
+  ignorePatterns: [
+    'node_modules/**',
+    '.next/**',
+    'app/generated/**/*',  // Use wildcard pattern to ignore all files in app/generated
+    '**/generated/**',
+    'node_modules/.prisma/**',
+    '.prisma/**',
+  ],
+  
+  // Override rules as needed
+  rules: {
+    // Fix for 'template literal' warning in payment-success/page.tsx
+    '@typescript-eslint/restrict-template-expressions': 'off',
+    '@typescript-eslint/no-unused-expressions': 'warn',
+    '@typescript-eslint/no-this-alias': 'warn',
+    '@typescript-eslint/no-unused-vars': 'warn',
+    '@typescript-eslint/no-require-imports': 'warn'
+  },
+  
+  // Add special overrides for generated files
+  overrides: [
+    {
+      files: ['app/generated/**/*.js', '**/generated/**/*.js'],
+      rules: {
+        '@typescript-eslint/no-unused-expressions': 'off',
+        '@typescript-eslint/no-this-alias': 'off',
+        '@typescript-eslint/no-unused-vars': 'off',
+        '@typescript-eslint/no-require-imports': 'off'
+      }
+    }
+  ]
+};
+
+================
+File: components.json
+================
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "app/globals.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui",
+    "lib": "@/lib",
+    "hooks": "@/hooks"
+  },
+  "iconLibrary": "lucide"
+}
+
+================
+File: eslint.config.mjs
+================
+import { dirname } from "path";
+import { fileURLToPath } from "url";
+import { FlatCompat } from "@eslint/eslintrc";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const compat = new FlatCompat({
+  baseDirectory: __dirname,
+});
+
+const eslintConfig = [
+  ...compat.extends("next/core-web-vitals", "next/typescript"),
+];
+
+export default eslintConfig;
+
+================
+File: next.config.ts
+================
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  /* config options here */
+};
+
+export default nextConfig;
+
+================
+File: postcss.config.mjs
+================
+const config = {
+  plugins: ["@tailwindcss/postcss"],
+};
+
+export default config;
+
+================
+File: README.md
+================
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+================
+File: tsconfig.json
+================
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
+
+================
+File: app/api/checkout-sessions/route.ts
+================
+import { NextRequest, NextResponse } from 'next/server';
+import { auth, createClerkClient } from '@clerk/nextjs/server';
+import Stripe from 'stripe';
+import type { ApiResponse, CheckoutSessionData } from '@/types'; // Use import type and adjust path if needed (e.g., @/types/api)
+// import { provisionUserAccess } from '@/lib/provision'; // Commented out as likely unused in this specific context
+
+// --- Environment Variable Checks ---
+console.log(`API Route Init: CLERK_SECRET_KEY is ${process.env.CLERK_SECRET_KEY ? 'SET' : 'NOT SET'}`);
+console.log(`API Route Init: STRIPE_SECRET_KEY is ${process.env.STRIPE_SECRET_KEY ? 'SET' : 'NOT SET'}`);
+const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+// --- End Checks ---
+
+if (!clerkSecretKey) {
+    console.error('FATAL: CLERK_SECRET_KEY environment variable is not set.');
+}
+if (!stripeSecretKey) {
+    console.error('FATAL: STRIPE_SECRET_KEY environment variable is not set.');
+}
+
+// Initialize Stripe client (only if key exists)
+const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, {
+    // Removed apiVersion to use library default
+    typescript: true,
+}) : null;
+
+// Initialize Clerk Backend Client using the factory function
+const clerkClient = clerkSecretKey ? createClerkClient({ secretKey: clerkSecretKey }) : null;
+
+// Define EmailAddress type based on Clerk's structure
+interface EmailAddress {
+    id: string | null;
+    emailAddress: string;
+}
+
+export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<CheckoutSessionData>>> {
+    if (!stripe || !clerkClient) {
+        const errorMsg = !stripe ? 'Stripe configuration error.' : 'Clerk configuration error (secret key missing?).';
+        console.error('Configuration Error:', errorMsg);
+        return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
+    }
+
+    try {
+  const authObject = await auth(); 
+  const userId = authObject.userId;
+
+  if (!userId) {
+            console.warn('Unauthorized attempt to create checkout session without user ID.');
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 }); 
+  }
+
+        // --- Start: Improved Email Fetching --- 
+        let userEmail: string | undefined | null = authObject.sessionClaims?.email as string | undefined | null; 
+
+  if (!userEmail) {
+            try {
+                console.log(`Email not in claims for ${userId}, attempting direct fetch...`);
+                // Use the explicitly created clerkClient instance
+                const user = await clerkClient.users.getUser(userId); 
+                userEmail = user.emailAddresses.find((e: EmailAddress) => e.id === user.primaryEmailAddressId)?.emailAddress;
+                if (userEmail) {
+                     console.log(`Successfully fetched email for ${userId} directly.`);
+                } else {
+                     console.warn(`Primary email not found for user ${userId} even after direct fetch.`);
+                }
+            } catch (fetchError: unknown) {
+                console.error(`Failed to fetch Clerk user details for ${userId}:`, fetchError);
+                 let errorMsg = 'Could not fetch user details to proceed with checkout.';
+                 if (fetchError instanceof Error) {
+                     errorMsg = `${errorMsg} Reason: ${fetchError.message}`;
+                 }
+                // Return a server error as we couldn't verify email due to an API issue
+                return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
+            }
+        }
+
+        if (!userEmail) {
+            console.error(`User email could not be determined for Clerk user ID: ${userId}. Cannot proceed with checkout.`);
+            // This indicates a configuration or data issue (user might not have a primary email)
+            return NextResponse.json({ success: false, error: 'User primary email could not be determined' }, { status: 400 });
+        }
+        // --- End: Improved Email Fetching ---
+
+    const body = await request.json();
+        const { priceId, communitySlug, communityName, planType, circleSpaceId } = body;
+
+        // Validate required fields from the request body
+        if (!priceId || typeof priceId !== 'string') {
+            return NextResponse.json({ success: false, error: 'Missing or invalid priceId (string)' }, { status: 400 });
+        }
+        if (!communitySlug || typeof communitySlug !== 'string') {
+            return NextResponse.json({ success: false, error: 'Missing or invalid communitySlug (string)' }, { status: 400 });
+        }
+        if (!circleSpaceId || typeof circleSpaceId !== 'number') {
+            return NextResponse.json({ success: false, error: 'Missing or invalid circleSpaceId (number)' }, { status: 400 });
+        }
+        if (!communityName || typeof communityName !== 'string') {
+            return NextResponse.json({ success: false, error: 'Missing or invalid communityName (string)' }, { status: 400 });
+        }
+        if (!planType || typeof planType !== 'string') {
+            return NextResponse.json({ success: false, error: 'Missing or invalid planType (string)' }, { status: 400 });
+        }
+
+        // Construct URLs based on environment
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+        
+        // --- Construct Success URL Correctly --- 
+        // Create the base URL first
+        const successUrlBase = `${baseUrl}/payment-success`;
+        // Prepare parameters for the query string
+        const successUrlParams = new URLSearchParams({
+            // session_id is added by Stripe via the template variable in successUrlBaseWithTemplate
+            spaceId: circleSpaceId.toString(),
+            communitySlug: communitySlug,
+        });
+        // Construct the final URL with the template variable AND the other parameters
+        const successUrl = `${successUrlBase}?session_id={CHECKOUT_SESSION_ID}&${successUrlParams.toString()}`; 
+        // --- End Success URL Construction --- 
+
+        const cancelUrl = `${baseUrl}/subscribe/${communitySlug}?cancelled=true`; // Use communitySlug in cancel URL
+
+        console.log(`Creating Stripe checkout session for user ${userId} (${userEmail}), price ${priceId}`);
+        console.log(`Success URL: ${successUrl}`);
+        console.log(`Cancel URL: ${cancelUrl}`);
+
+        // Look for an existing Stripe customer by email, or create one if not found
+        const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+        let customerId: string;
+
+        if (customers.data.length > 0) {
+            customerId = customers.data[0].id;
+            console.log(`Found existing Stripe customer: ${customerId} for email ${userEmail}`);
+        } else {
+            const newCustomer = await stripe.customers.create({
+                email: userEmail,
+                metadata: {
+                    clerkUserId: userId, // Link Stripe customer to Clerk user ID
+                },
+            });
+            customerId = newCustomer.id;
+            console.log(`Created new Stripe customer: ${customerId} for email ${userEmail}`);
+        }
+
+        // Create the Stripe Checkout Session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+            mode: 'subscription',
+            success_url: successUrl,
+            cancel_url: cancelUrl,
+            customer: customerId, // Associate session with the Stripe customer
+            customer_update: {
+                address: 'auto'
+            },
+            client_reference_id: userId, // Recommended to pass Clerk User ID here
+      metadata: {
+                userId: userId, // Keep Clerk ID in metadata
+                spaceId: circleSpaceId.toString(), // Ensure spaceId is in metadata
+          priceId: priceId,
+          communitySlug: communitySlug,
+                planType: planType, 
+            },
+            automatic_tax: { enabled: true }, 
+            allow_promotion_codes: true,
+        });
+
+    if (!session.url) {
+            console.error('Stripe session URL was null.', session);
+            return NextResponse.json({ success: false, error: 'Could not create checkout session URL.' }, { status: 500 });
+    }
+
+        console.log(`Stripe checkout session created: ${session.id} for user ${userId}`);
+
+        // Return the session URL to the client
+        return NextResponse.json<ApiResponse<CheckoutSessionData>>({ 
+        success: true, 
+            data: { checkoutUrl: session.url }
+        });
+
+    } catch (error: unknown) {
+        console.error('Error creating Stripe checkout session:', error);
+        let errorMessage = 'An unexpected error occurred.';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        }
+        return NextResponse.json<ApiResponse<never>>({ success: false, error: `Could not create checkout session: ${errorMessage}`, details: error }, { status: 500 }); // Include more detail in error
+  }
+}
+
+================
+File: app/payment-success/page.tsx
+================
+// app/payment-success/page.tsx (Server Component)
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import Stripe from 'stripe';
+import { currentUser } from '@clerk/nextjs/server';
+import { provisionCircleAccess } from '@/lib/provision';
+import prisma from '@/lib/prisma';
+import { Button } from '@/components/ui/button';
+import { AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+if (!stripeSecretKey) {
+    console.error('FATAL: STRIPE_SECRET_KEY is not set in payment-success page.');
+}
+const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { typescript: true }) : null;
+
+// --- Define Return Types for VerifyAndProvision --- 
+interface ProvisionSuccessResult {
+    success: true;
+    redirectUrl: string;
+}
+interface ProvisionErrorResult {
+    success: false;
+    error: string;
+}
+
+// --- Helper Component for Logic & Rendering ---
+async function VerifyAndProvision({ 
+    sessionId, 
+    spaceId, 
+    communitySlug 
+}: {
+    sessionId: string;
+    spaceId: number;
+    communitySlug: string;
+}): Promise<ProvisionSuccessResult | ProvisionErrorResult> {
+    const user = await currentUser();
+    const userId = user?.id;
+    const userEmail = user?.primaryEmailAddress?.emailAddress;
+    const userName = user ? (user.firstName || user.username || userEmail?.split('@')[0] || 'New Member') : 'Member';
+
+    console.log('[VerifyAndProvision] currentUser ID:', userId); 
+    console.log('[VerifyAndProvision] currentUser Email:', userEmail); 
+
+    if (!userId || !userEmail) {
+        console.error("[VerifyAndProvision] Auth check FAILED: Could not get userId or email from currentUser().");
+        return { 
+            success: false, 
+            error: "Could not verify your user session details after payment. Please try signing out and signing back in, or contact support."
+        }; // Return error data
+    }
+    console.log('[VerifyAndProvision] Auth check PASSED using currentUser.');
+
+    if (!stripe) {
+        console.error("[VerifyAndProvision] Stripe client not initialized.");
+        return { success: false, error: "Payment processing is currently unavailable. Please contact support." }; // Return error data
+    }
+
+    try {
+        // 1. Verify Stripe Session
+        console.log(`[VerifyAndProvision] Verifying Stripe session: ${sessionId} for user ${userId}`);
+        const session = await stripe.checkout.sessions.retrieve(sessionId, {
+            expand: ['customer', 'subscription', 'line_items.data.price.product']
+        });
+
+        if (!session || session.client_reference_id !== userId) {
+             throw new Error(`Invalid session (ID: ${sessionId}) or user mismatch (Expected: ${userId}, Got: ${session?.client_reference_id}).`);
+        }
+        if (session.payment_status !== 'paid') {
+            throw new Error(`Payment status is ${session.payment_status}. Provisioning requires status 'paid'.`);
+        }
+        console.log(`[VerifyAndProvision] Stripe session ${sessionId} verified as paid.`);
+
+        // 2. Extract Data & Fetch Community from DB
+        const stripeSubscriptionId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id;
+        const stripeCustomerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
+        const priceId = session.line_items?.data[0]?.price?.id;
+
+        if (!stripeSubscriptionId || !stripeCustomerId || !priceId) {
+             console.error("[VerifyAndProvision] Missing critical data from Stripe session:", { stripeSubscriptionId, stripeCustomerId, priceId });
+             throw new Error("Missing critical subscription/customer/price data from Stripe session.");
+        }
+
+        console.log(`[VerifyAndProvision] Fetching community with slug: ${communitySlug}`);
+        const community = await prisma.community.findUnique({
+             where: { slug: communitySlug },
+             select: { id: true, circleSpaceId: true, stripePriceIdMonthly: true, stripePriceIdAnnually: true }
+        });
+
+        if (!community || community.circleSpaceId !== spaceId) {
+             console.error('[VerifyAndProvision] Community data mismatch or not found:', { slug: communitySlug, expectedSpaceId: spaceId, foundCommunity: community });
+             throw new Error("Community data mismatch or community not found.");
+        }
+
+        const planType = priceId === community.stripePriceIdMonthly ? 'monthly' :
+                         priceId === community.stripePriceIdAnnually ? 'annual' : null;
+        if (!planType) {
+             console.error('[VerifyAndProvision] Could not determine plan type from price ID:', { priceId, community });
+             throw new Error("Could not determine plan type from Stripe price ID.");
+        }
+
+        // 3. Call Provisioning Function (Idempotency handled inside)
+        console.log(`[VerifyAndProvision] Calling provisionCircleAccess for user ${userId} (${userEmail}), space ${spaceId}, community ${community.id}`);
+        const provisionResult = await provisionCircleAccess(
+            userId,
+            userEmail,
+            userName,
+            spaceId,
+            community.id,
+            stripeSubscriptionId,
+            stripeCustomerId,
+            planType
+        );
+
+        if (!provisionResult.success) {
+            throw new Error(provisionResult.error || 'Failed to provision Circle access. Please check server logs.');
+        }
+
+        // 5. Return Success Data Instead of Redirecting
+        console.log(`[VerifyAndProvision] Provisioning successful for user ${userId}, returning redirect URL.`);
+        return { 
+            success: true, 
+            redirectUrl: `/platform-space/${spaceId}` 
+        }; // Return success data
+
+    } catch (error: unknown) {
+        console.error("[VerifyAndProvision] Error during payment verification or provisioning:", error);
+        // Return error data
+        return { 
+            success: false, 
+            error: (error as Error).message || 'An unknown error occurred while setting up your access.' 
+        }; 
+    }
+}
+
+// --- Main Page Component ---
+export default async function PaymentSuccessPage({
+    searchParams 
+}: {
+    searchParams?: { [key: string]: string | string[] | undefined };
+}) {
+    // Extract params HERE from the props
+    const sessionId = searchParams?.session_id as string | undefined;
+    const spaceIdStr = searchParams?.spaceId as string | undefined;
+    const communitySlug = searchParams?.communitySlug as string | undefined;
+    let error: string | null = null;
+    let spaceId: number | null = null;
+
+    // Validate parameters
+    if (!sessionId) {
+        error = "Missing checkout session ID.";
+    }
+    if (!spaceIdStr || Number.isNaN(Number.parseInt(spaceIdStr, 10))) { 
+         error = "Missing or invalid space identifier.";
+    } else {
+        spaceId = Number.parseInt(spaceIdStr, 10);
+    }
+    if (!communitySlug) {
+         error = "Missing community identifier.";
+    }
+
+    // Render error immediately if basic parameters are missing/invalid
+    if (error || !sessionId || !communitySlug || spaceId === null) {
+        console.error("[PaymentSuccessPage] Invalid URL parameters:", { sessionId, spaceIdStr, communitySlug, error });
+        return (
+             <div className="container mx-auto p-4">
+                 <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Invalid Request</AlertTitle>
+                    <AlertDescription>{error || 'Required information missing in URL.'}</AlertDescription>
+                 </Alert>
+                 <Button asChild variant="link" className="mt-4">
+                     <Link href="/">Return to Homepage</Link>
+                 </Button>
+             </div>
+        );
+    }
+
+    // Await the result of verification and provisioning directly
+    const result = await VerifyAndProvision({ sessionId, spaceId, communitySlug });
+
+    // Handle Redirect or Error Based on Result
+    if (result.success) {
+        // Call redirect from the main page component scope
+        console.log(`[PaymentSuccessPage] Provisioning succeeded. Redirecting to ${result.redirectUrl}...`);
+        redirect(result.redirectUrl);
+        // Note: Code below redirect() will not execute
+    } else {
+        // Render the error state returned by VerifyAndProvision
+        console.error(`[PaymentSuccessPage] Provisioning failed. Error: ${result.error}`);
+        return (
+            <div className="container mx-auto p-4 flex flex-col items-center justify-center min-h-[60vh]">
+                <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Subscription Finalization Failed</AlertTitle>
+                    <AlertDescription>
+                        {result.error}
+                        <p className="mt-2">Please contact support if the issue persists, mentioning session ID: {sessionId}</p>
+                    </AlertDescription>
+                    <Button asChild variant="link" className="mt-4 ml-auto">
+                        <Link href="/">Return to Homepage</Link>
+                    </Button>
+                 </Alert>
+            </div>
+        );
+    }
+}
+
+================
+File: app/globals.css
+================
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+================
+File: app/page.tsx
+================
+// app/page.tsx (Server Component)
+import prisma from '@/lib/prisma';
+import Link from 'next/link';
+import Image from 'next/image';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+// import { Badge } from '@/components/ui/badge'; // Keep commented if not used
+import { auth } from '@clerk/nextjs/server';
+
+// Define types based on the Prisma schema (as established)
+interface Community {
+    id: number;
+    name: string;
+    slug: string;
+    description: string | null;
+    imageUrl: string | null;
+    circleSpaceId: number;
+    // Add other fields if needed by the component, e.g., price IDs
+}
+
+interface SubscriptionWithCommunityId {
+    communityId: number;
+}
+
+// Fetch communities and user's subscriptions server-side
+async function getData() {
+    // Get auth info but don't fail if user is not authenticated
+    const { userId } = await auth() || { userId: null };
+    
+    const communities = await prisma.community.findMany({
+        orderBy: { name: 'asc' },
+        // Select only the fields needed by the component
+        select: {
+            id: true,
+            name: true,
+            slug: true,
+            description: true,
+            imageUrl: true,
+            circleSpaceId: true,
+        }
+    }) as Community[]; // Cast to our local interface
+
+    let userSubscriptions: SubscriptionWithCommunityId[] = [];
+    if (userId) {
+        userSubscriptions = await prisma.subscription.findMany({
+            where: { userId: userId, status: 'active' }, // Only care about active subs
+            select: { communityId: true } // Select only needed field
+        });
+    }
+    const subscribedCommunityIds = new Set(userSubscriptions.map(sub => sub.communityId));
+    return { communities, subscribedCommunityIds, isAuthenticated: !!userId };
+}
+
+export default async function HomePage() {
+    const { communities, subscribedCommunityIds, isAuthenticated } = await getData();
+
+    return (
+        <div className="container mx-auto py-8 px-4">
+            <h1 className="text-3xl font-bold mb-6 text-center sm:text-left">Explore Our Communities</h1>
+            {communities.length === 0 && <p className="text-center text-muted-foreground">No communities available yet.</p>}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {communities.map((community) => {
+                    const isSubscribed = subscribedCommunityIds.has(community.id);
+                    return (
+                        <Card key={community.id} className="flex flex-col overflow-hidden">
+                            <CardHeader className="p-0">
+                                {community.imageUrl ? (
+                                    <div className="relative h-48 w-full">
+                                        <Image
+                                            src={community.imageUrl}
+                                            alt={community.name ?? 'Community Image'}
+                                            fill
+                                            style={{ objectFit: 'cover' }}
+                                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                            priority={false}
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="h-48 w-full bg-secondary flex items-center justify-center">
+                                        <span className="text-muted-foreground">No Image</span>
+                                    </div>
+                                )}
+                             </CardHeader>
+                             <CardContent className="p-4 flex-grow">
+                                <CardTitle className="mb-2">{community.name}</CardTitle>
+                                <CardDescription>{community.description || 'No description available.'}</CardDescription>
+                             </CardContent>
+                             <CardFooter className="p-4">
+                                {isAuthenticated ? (
+                                    isSubscribed ? (
+                                        <Link href={`/platform-space/${community.circleSpaceId}`} className="w-full">
+                                            <Button className="w-full" variant="outline">Go to Space</Button>
+                                        </Link>
+                                    ) : (
+                                        <Link href={`/subscribe/${community.slug}`} className="w-full">
+                                            <Button className="w-full">View Plans</Button>
+                                        </Link>
+                                    )
+                                ) : (
+                                    <Link href={`/sign-in?redirect_url=/subscribe/${community.slug}`} className="w-full">
+                                        <Button className="w-full">Sign in to View Plans</Button>
+                                    </Link>
+                                )}
+                            </CardFooter>
+                        </Card>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+================
+File: lib/circle-admin-api.ts
+================
+// lib/circle-admin-api.ts
+const CIRCLE_BASE_URL = process.env.CIRCLE_BASE_URL?.replace(/\/$/, ''); // Ensure no trailing slash
+const ADMIN_API_KEY = process.env.CIRCLE_ADMIN_V2_API_KEY;
+
+// Define a more specific error type
+interface ApiError extends Error {
+    status?: number;
+    details?: unknown;
+}
+
+interface CircleApiOptions {
+    method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+    body?: Record<string, unknown>;
+    cache?: RequestCache;
+    params?: Record<string, string | number | boolean>;
+}
+
+/**
+ * Checks if the object is a potential Circle API error response structure.
+ * Basic check for message or error properties.
+ */
+function isPotentialApiErrorData(data: unknown): data is { message?: string; error?: string } {
+    if (typeof data !== 'object' || data === null) {
+        return false;
+    }
+    return 'message' in data || 'error' in data;
+}
+
+/**
+ * Calls the Circle Admin v2 API.
+ * @param endpoint The API endpoint path (e.g., 'community_members')
+ * @param options Fetch options including method, body, cache, and URL parameters.
+ * @returns The JSON response from the API.
+ * @throws Error if API keys are missing or if the API call fails.
+ */
+export async function callCircleAdminApi<T = unknown>(
+  endpoint: string,
+  options: CircleApiOptions = {}
+): Promise<T> {
+  const { method = 'GET', body, cache = 'no-store', params } = options;
+
+  if (!ADMIN_API_KEY || !CIRCLE_BASE_URL) {
+    throw new Error('Circle Admin API keys or Base URL not configured in environment variables.');
+  }
+
+  // Ensure endpoint doesn't start with a slash
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
+  const url = new URL(`${CIRCLE_BASE_URL}/api/admin/v2/${cleanEndpoint}`);
+
+  // Append URL search params if provided
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.append(key, String(value));
+    }
+  }
+  const finalUrl = url.toString(); // Use the final constructed URL
+
+  console.log(`Calling Circle Admin API: ${method} ${finalUrl}`);
+
+  const headers: HeadersInit = {
+    'Authorization': `Bearer ${ADMIN_API_KEY}`,
+    'Content-Type': 'application/json',
+  };
+
+  const fetchOptions: RequestInit = {
+    method: method,
+    headers: headers,
+    cache: cache,
+    ...(body && { body: JSON.stringify(body) }),
+  };
+
+  try {
+    const response = await fetch(finalUrl, fetchOptions); // Use finalUrl
+
+    // Handle potential empty responses for DELETE etc.
+    if (response.status === 204 && method === 'DELETE') {
+      console.log(`Circle Admin API ${method} ${finalUrl} successful (204 No Content)`);
+      // @ts-expect-error - Returning success marker for 204
+      return { success: true, message: 'Operation successful (No Content)' } as T;
+    }
+
+    const contentType = response.headers.get('content-type');
+    let data: unknown;
+    let errorText: string | null = null;
+
+    try {
+      if (contentType?.includes('application/json')) {
+        data = await response.json();
+      } else {
+        errorText = await response.text(); // Read as text if not JSON
+        if (response.ok) {
+          console.log(`Circle Admin API ${method} ${finalUrl} returned non-JSON success (${response.status})`);
+          data = { success: true, status: response.status, message: 'Operation successful (non-JSON response)' };
+        } else {
+          // Will be handled by !response.ok check below
+        }
+      }
+    } catch (parseError) {
+      console.error(`Error parsing response body for ${method} ${finalUrl}:`, parseError);
+      const error: ApiError = new Error(`Failed to parse API response: ${(parseError as Error).message}`);
+      error.status = response.status; // Attach status if available
+      throw error;
+    }
+
+    if (!response.ok) {
+      let errorMessage = `Circle API Error: ${response.status}`;
+      if (data && isPotentialApiErrorData(data)) {
+        errorMessage = data.message || data.error || errorMessage;
+      } else if (errorText) {
+        errorMessage = `${errorMessage} - ${errorText}`;
+      }
+      console.error(`Circle Admin API Error (${response.status}) for ${method} ${finalUrl}:`, data || errorText);
+      const error: ApiError = new Error(errorMessage);
+      error.status = response.status;
+      error.details = data || errorText; // Attach full response data or text
+      throw error;
+    }
+
+    return data as T;
+  } catch (error) {
+    console.error(`Network or processing error in callCircleAdminApi for ${method} ${finalUrl}:`, error);
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(`An unknown error occurred during the Circle API call: ${String(error)}`);
+  }
+}
+
+================
+File: lib/circle-auth-api.ts
+================
+// lib/circle-auth-api.ts
+const CIRCLE_BASE_URL = process.env.CIRCLE_BASE_URL?.replace(/\/$/, ''); // Ensure no trailing slash
+// Use the Headless Auth API Key
+const HEADLESS_AUTH_API_KEY = process.env.CIRCLE_HEADLESS_AUTH_API_KEY;
+
+// Define a more specific error type
+interface ApiError extends Error {
+    status?: number;
+    details?: unknown;
+}
+
+interface CircleApiOptions {
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  body?: Record<string, unknown>;
+  cache?: RequestCache;
+  params?: Record<string, string | number | boolean>;
+}
+
+/**
+ * Checks if the object is a potential Circle API error response structure.
+ */
+function isPotentialApiErrorData(data: unknown): data is { message?: string; error?: string } {
+    if (typeof data !== 'object' || data === null) {
+        return false;
+    }
+    return 'message' in data || 'error' in data;
+}
+
+/**
+ * Calls the Circle Headless Auth API (for generating member tokens).
+ * @param endpoint The API endpoint path (e.g., 'auth_token') - **VERIFY THIS PATH**
+ * @param options Fetch options including method, body, cache, and URL parameters.
+ * @returns The JSON response from the API.
+ * @throws Error if API keys are missing or if the API call fails.
+ */
+export async function callCircleHeadlessAuthApi<T = unknown>(
+  endpoint: string,
+  options: CircleApiOptions = {}
+): Promise<T> {
+  const { method = 'GET', body, cache = 'no-store', params } = options;
+
+  if (!HEADLESS_AUTH_API_KEY || !CIRCLE_BASE_URL) {
+    throw new Error('Circle Headless Auth API Key or Base URL not configured.');
+  }
+
+  // Ensure endpoint doesn't start with a slash
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
+  // ** Verify the correct base path for Headless Auth API from Circle Docs **
+  const url = new URL(`${CIRCLE_BASE_URL}/api/v1/headless/${cleanEndpoint}`); 
+
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.append(key, String(value));
+    }
+  }
+  const finalUrl = url.toString();
+
+  console.log(`Calling Circle Headless Auth API: ${method} ${finalUrl}`);
+
+  const headers: HeadersInit = {
+    // Use the Headless Auth Key
+    'Authorization': `Bearer ${HEADLESS_AUTH_API_KEY}`,
+    'Content-Type': 'application/json',
+  };
+
+  const fetchOptions: RequestInit = {
+    method: method,
+    headers: headers,
+    cache: cache,
+    ...(body && { body: JSON.stringify(body) }),
+  };
+
+  try {
+    const response = await fetch(finalUrl, fetchOptions);
+
+    const contentType = response.headers.get('content-type');
+    let data: unknown;
+    let errorText: string | null = null;
+
+    try {
+      if (contentType?.includes('application/json')) {
+        data = await response.json();
+      } else {
+        errorText = await response.text();
+        if (response.ok) {
+          console.log(`Circle Headless Auth API ${method} ${finalUrl} returned non-JSON success (${response.status})`);
+          data = { success: true, status: response.status, message: 'Operation successful (non-JSON response)' };
+        } else {
+          // Handled below
+        }
+      }
+    } catch (parseError) {
+      console.error(`Error parsing response body for ${method} ${finalUrl}:`, parseError);
+      const error: ApiError = new Error(`Failed to parse API response: ${(parseError as Error).message}`);
+      error.status = response.status;
+      throw error;
+    }
+
+    if (!response.ok) {
+      const baseErrorMessage = `Circle API Error: ${response.status}`;
+      let detailedErrorMessage = baseErrorMessage; // Start with base message
+      
+      if (data && isPotentialApiErrorData(data)) {
+        // If we got JSON data with a message/error, use that for the main error message
+        detailedErrorMessage = data.message || data.error || baseErrorMessage;
+      } else if (errorText) {
+        // If we got non-JSON text (like HTML), create a generic message for logging
+        // but keep the full text for the error details.
+        detailedErrorMessage = `${baseErrorMessage} - Received non-JSON response (length: ${errorText.length})`;
+      } else {
+          detailedErrorMessage = `${baseErrorMessage} - No response body received.`;
+      }
+
+      // Log the concise message
+      console.error(`Circle Headless Auth API Error (${response.status}) for ${method} ${finalUrl}: ${detailedErrorMessage}`); 
+      
+      // Throw an error with the detailed message, attaching full details
+      const error: ApiError = new Error(detailedErrorMessage);
+      error.status = response.status;
+      error.details = data || errorText; // Attach full JSON data or HTML text
+      throw error;
+    }
+
+    return data as T;
+  } catch (error) {
+    console.error(`Network or processing error in callCircleHeadlessAuthApi for ${method} ${finalUrl}:`, error);
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(`An unknown error occurred during the Circle Headless Auth API call: ${String(error)}`);
+  }
+}
+
+================
+File: lib/circle-member-api.ts
+================
+// lib/circle-member-api.ts
+const CIRCLE_BASE_URL = process.env.CIRCLE_BASE_URL?.replace(/\/$/, ''); // Ensure no trailing slash
+
+// Define a more specific error type
+interface ApiError extends Error {
+    status?: number;
+    details?: unknown;
+}
+
+interface CircleApiOptions {
+    method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+    body?: Record<string, unknown>;
+    cache?: RequestCache;
+    params?: Record<string, string | number | boolean>;
+    accessToken: string; // Mandatory
+}
+
+/**
+ * Checks if the object is a potential Circle API error response structure.
+ */
+function isPotentialApiErrorData(data: unknown): data is { message?: string; error?: string } {
+    if (typeof data !== 'object' || data === null) {
+        return false;
+    }
+    return 'message' in data || 'error' in data;
+}
+
+/**
+ * Calls the Circle Member API (Headless v1).
+ * Requires a valid member access token.
+ * @param endpoint The API endpoint path (e.g., 'spaces/:id')
+ * @param options Fetch options including method, body, cache, URL parameters, and accessToken.
+ * @returns The JSON response from the API.
+ * @throws Error if Base URL is missing or if the API call fails.
+ */
+export async function callCircleMemberApi<T = unknown>(
+    endpoint: string,
+    options: CircleApiOptions
+): Promise<T> {
+    const { method = 'GET', body, cache = 'no-store', params, accessToken } = options;
+
+    if (!CIRCLE_BASE_URL) {
+        throw new Error('Circle Base URL not configured.');
+    }
+    if (!accessToken) {
+        throw new Error('Circle Member API access token is required.');
+    }
+
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
+    
+    // --- CORRECTED URL Path for Headless Member API --- 
+    const url = new URL(`${CIRCLE_BASE_URL}/api/headless/v1/${cleanEndpoint}`);
+    // --- End Correction --- 
+
+    if (params) {
+        for (const [key, value] of Object.entries(params)) {
+            url.searchParams.append(key, String(value));
+        }
+    }
+    const finalUrl = url.toString();
+
+    console.log(`Calling Circle Member API: ${method} ${finalUrl}`);
+
+    const headers: HeadersInit = {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+    };
+
+    const fetchOptions: RequestInit = {
+        method: method,
+        headers: headers,
+        cache: cache,
+        ...(body && { body: JSON.stringify(body) }),
+    };
+
+    try {
+        const response = await fetch(finalUrl, fetchOptions);
+
+        const contentType = response.headers.get('content-type');
+        let data: unknown;
+        let errorText: string | null = null;
+
+        try {
+            if (contentType?.includes('application/json')) {
+                data = await response.json();
+            } else {
+                errorText = await response.text();
+                 if (response.ok) {
+                    console.log(`Circle Member API ${method} ${finalUrl} returned non-JSON success (${response.status})`);
+                    data = { success: true, status: response.status, message: 'Operation successful (non-JSON response)' };
+                 } else {
+                    // Handled below
+                 }
+            }
+        } catch (parseError) {
+            console.error(`Error parsing response body for ${method} ${finalUrl}:`, parseError);
+            const error: ApiError = new Error(`Failed to parse API response: ${(parseError as Error).message}`);
+            error.status = response.status;
+            throw error;
+        }
+
+        if (!response.ok) {
+            let errorMessage = `Circle API Error: ${response.status}`;
+             if (data && isPotentialApiErrorData(data)) {
+                errorMessage = data.message || data.error || errorMessage;
+            } else if (errorText) {
+                 errorMessage = `${errorMessage} - Received non-JSON response (length: ${errorText.length})`; // Concise log for non-JSON
+            }
+            console.error(`Circle Member API Error (${response.status}) for ${method} ${finalUrl}: ${errorMessage}`); // Log concise message
+            const error: ApiError = new Error(errorMessage);
+            error.status = response.status;
+            error.details = data || errorText; // Attach full details to thrown error
+            throw error;
+        }
+
+        return data as T;
+    } catch (error) {
+        console.error(`Network or processing error in callCircleMemberApi for ${method} ${finalUrl}:`, error);
+        if (error instanceof Error) {
+            throw error;
+        }
+        throw new Error(`An unknown error occurred during the Circle Member API call: ${String(error)}`);
+    }
+}
+
+================
+File: lib/prisma.ts
+================
+import { PrismaClient } from '@prisma/client';
+
+// PrismaClient is attached to the `global` object in development to prevent
+// exhausting your database connection limit.
+//
+// Learn more: https://pris.ly/d/help/next-js-best-practices
+
+declare global {
+  // allow global `var` declarations
+  // eslint-disable-next-line no-var
+  var __prisma: PrismaClient | undefined;
+}
+
+const prisma =
+  global.__prisma ||
+  new PrismaClient({
+    // log: ['query'], // Uncomment to log queries in development
+  });
+
+if (process.env.NODE_ENV !== 'production') {
+  global.__prisma = prisma;
+}
+
+export default prisma;
+
+================
+File: lib/provision.ts
+================
+import prisma from './prisma';
+import { callCircleAdminApi } from './circle-admin-api';
+// import crypto from 'node:crypto'; // Removed unused import
+// import type { Prisma } from '@prisma/client'; // Remove problematic Prisma import
+import type { ApiResponse } from '@/types'; // Import the new type
+
+// Define a local interface for the expected user record shape
+interface UserWithCircleId {
+    id: string;
+    email: string;
+    name: string | null;
+    circleCommunityMemberId: number | null;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+// Define interfaces for API responses if not already done globally
+interface CircleMember {
+  id: number;
+  user_id: number;
+  community_id: number;
+  // Add other relevant fields
+}
+
+/**
+ * Checks if the object is a potential Circle API error response structure.
+ */
+function isPotentialApiErrorData(data: unknown): data is { message?: string; details?: unknown } {
+    if (typeof data !== 'object' || data === null) {
+        return false;
+    }
+    return 'message' in data;
+}
+
+/**
+ * Checks if the object is an error with status code.
+ */
+function hasStatusCode(error: unknown): error is { status?: number } {
+    return typeof error === 'object' && error !== null && 'status' in error;
+}
+
+/**
+ * Provisions Circle.so access for a user after successful subscription.
+ * - Creates/updates the user record if necessary (basic info from Clerk).
+ * - Upserts the subscription record in the local DB.
+ * - Creates/finds the user in Circle Admin API.
+ * - Adds the user to the specified Circle Space.
+ */
+export async function provisionCircleAccess(
+    platformUserId: string,
+    userEmail: string,
+    userName: string | null, // Add user name from Clerk
+    spaceId: number,
+    communityId: number, // Prisma Community ID
+    stripeSubscriptionId: string,
+    stripeCustomerId: string,
+    planType: 'monthly' | 'annual'
+): Promise<ApiResponse<void>> {
+    console.log(`Provisioning access for ${userEmail} (ID: ${platformUserId}) to space ${spaceId}`);
+    // Use the locally defined interface
+    let userRecord: UserWithCircleId | null = null;
+
+    try {
+        // 1. Upsert User in Platform DB (ensure user exists locally)
+        // This step is crucial since we removed the Clerk webhook
+        try {
+            userRecord = await prisma.user.upsert({
+                where: { id: platformUserId },
+                update: { name: userName, email: userEmail }, // Update name/email just in case
+                create: {
+                    id: platformUserId,
+                    email: userEmail,
+                    name: userName,
+                },
+                select: { id: true, email: true, name: true, circleCommunityMemberId: true, createdAt: true, updatedAt: true }
+            }) as UserWithCircleId; // Add type assertion for safety
+            console.log(`User record ${userRecord.id} upserted in DB.`);
+        } catch (dbError) {
+            console.error(`Failed to upsert user ${platformUserId} in DB:`, dbError);
+            throw new Error(`Database error during user upsert: ${(dbError as Error).message}`);
+        }
+
+        // 2. Upsert Subscription Record in Platform DB
+        const subscription = await prisma.subscription.upsert({
+            where: { userId_communityId: { userId: platformUserId, communityId: communityId } },
+            update: {
+                status: 'active',
+                stripeSubscriptionId: stripeSubscriptionId,
+                stripeCustomerId: stripeCustomerId,
+                planType: planType,
+                startDate: new Date(),
+                endDate: null, // Clear end date on reactivation/update
+            },
+            create: {
+                userId: platformUserId,
+                communityId: communityId,
+                status: 'active',
+                stripeSubscriptionId: stripeSubscriptionId,
+                stripeCustomerId: stripeCustomerId,
+                planType: planType,
+                startDate: new Date(),
+            },
+        });
+        console.log(`Subscription record updated/created for user ${platformUserId}, community ${communityId}`);
+
+        // 3. Ensure User Exists in Circle (Create if not)
+        let circleMemberExists = false;
+        let circleCommunityMemberId: number | undefined = userRecord?.circleCommunityMemberId ?? undefined;
+
+        // If we already have the Circle ID stored, assume they exist in Circle
+        if (circleCommunityMemberId) {
+            console.log(`Using stored Circle Community Member ID: ${circleCommunityMemberId}`);
+            circleMemberExists = true;
+        }
+        // Otherwise, search by email
+        else {
+            try {
+                console.log(`Searching for Circle member by email: ${userEmail}`);
+                const searchResult = await callCircleAdminApi<{ community_members: CircleMember[] }>(`community_members/search`, {
+                    method: 'GET',
+                    params: { email: userEmail },
+                });
+
+                if (searchResult.community_members && searchResult.community_members.length > 0) {
+                    circleMemberExists = true;
+                    circleCommunityMemberId = searchResult.community_members[0].id;
+                    console.log(`Found existing Circle member ID: ${circleCommunityMemberId} for email: ${userEmail}`);
+                    // Store Circle ID in our DB for future use
+                    await prisma.user.update({ where: { id: platformUserId }, data: { circleCommunityMemberId } });
+                } else {
+                     console.log(`Circle member ${userEmail} not found..., will attempt creation.`);
+                     // If not found, create them
+                     console.log(`Attempting to create Circle member for ${userEmail}`);
+                     const createResult = await callCircleAdminApi<CircleMember>('community_members', {
+                         method: 'POST',
+                         body: {
+                             community_id: 1, // Replace with your actual Community ID from Circle if needed, often it's just 1
+                             email: userEmail,
+                             name: userName || userEmail.split('@')[0], // Use provided name or derive from email
+                             skip_invitation: true, // Crucial: Do not send invite email
+                         },
+                     });
+                     circleCommunityMemberId = createResult.id;
+                     console.log(`Successfully created Circle member ${userEmail} with ID: ${circleCommunityMemberId}`);
+                     // Store Circle ID in our DB
+                     await prisma.user.update({ where: { id: platformUserId }, data: { circleCommunityMemberId } });
+                }
+
+            } catch (searchError: unknown) {
+                let isNotFoundError = false;
+                if (hasStatusCode(searchError) && searchError.status === 404) {
+                    isNotFoundError = true;
+                }
+                // Check details message as well, as Circle might not use 404 consistently
+                if (!isNotFoundError && typeof searchError === 'object' && searchError !== null && 'details' in searchError) {
+                    const details = (searchError as { details: unknown }).details;
+                    if (isPotentialApiErrorData(details) && details.message?.includes('not found')) {
+                         isNotFoundError = true;
+                    }
+                }
+
+                if (isNotFoundError) {
+                    console.log(`Circle member ${userEmail} not found (404/message), will attempt creation.`);
+                    circleMemberExists = false;
+                } else {
+                    console.error('Unexpected error searching for Circle member:', searchError);
+                    throw searchError;
+                }
+            }
+        }
+
+        // Create Circle member if they don't exist
+        if (!circleMemberExists) {
+            // const tempPassword = generateTemporaryPassword(); // Removed password generation
+            console.log(`Attempting to create Circle member for ${userEmail}`);
+            try {
+                const createResult = await callCircleAdminApi<{ community_member: { id: number } }>('community_members', {
+                    method: 'POST',
+                    body: {
+                        email: userEmail,
+                        // password: tempPassword, // Removed password
+                        // Let Circle handle password setup via its flow if needed
+                        skip_invitation: true,
+                        name: userName || undefined, // Pass name if available
+                    },
+                });
+                circleCommunityMemberId = createResult.community_member.id;
+                console.log(`Successfully created Circle member ${userEmail} with ID: ${circleCommunityMemberId}`);
+                // Store Circle ID in our DB
+                await prisma.user.update({ where: { id: platformUserId }, data: { circleCommunityMemberId } });
+            } catch (createError) {
+                console.error(`Failed to create Circle member ${userEmail}:`, createError);
+                await prisma.subscription.update({
+                    where: { id: subscription.id },
+                    data: { status: 'provisioning_failed' }
+                });
+                throw createError;
+            }
+        }
+
+        // Ensure we have a Circle Community Member ID at this point
+        if (!circleCommunityMemberId) {
+            throw new Error('Could not determine Circle Community Member ID after search/create.');
+        }
+
+        // 4. Add User to Specific Space
+        try {
+            console.log(`Adding Circle member ${circleCommunityMemberId} (${userEmail}) to space ${spaceId}`);
+            await callCircleAdminApi('space_members', {
+                method: 'POST',
+                body: {
+                    community_member_id: circleCommunityMemberId,
+                    space_id: spaceId,
+                    email: userEmail,
+                },
+            });
+            console.log(`Successfully added member ${circleCommunityMemberId} to Circle space ${spaceId}`);
+        } catch (addError: unknown) {
+             let alreadyMember = false;
+             // Variable is used for log messages, no need to store separately
+             // let errorMessage = 'Unknown error adding member to space';
+
+             if (typeof addError === 'object' && addError !== null) {
+                // Check common error message patterns
+                const msg = (addError as { message?: string }).message?.toLowerCase() || '';
+                const detailsMsg = ( (addError as { details?: unknown }).details as { message?: string })?.message?.toLowerCase() || '';
+                if (msg.includes('already been taken') || msg.includes('already a member') ||
+                    detailsMsg.includes('already been taken') || detailsMsg.includes('already a member')) {
+                    alreadyMember = true;
+                }
+                // Capture a more specific message if possible
+                 // if ((addError as Error).message) errorMessage = (addError as Error).message;
+             }
+
+             if (alreadyMember) {
+                 console.warn(`User ${circleCommunityMemberId} already in space ${spaceId}. Continuing.`);
+             } else {
+                console.error(`Failed to add member ${circleCommunityMemberId} to Circle space ${spaceId}:`, addError);
+                await prisma.subscription.update({
+                    where: { id: subscription.id },
+                    data: { status: 'provisioning_failed' }
+                });
+                throw addError;
+             }
+        }
+
+        console.log(`Provisioning completed successfully for ${userEmail} to space ${spaceId}.`);
+        return { success: true, data: undefined };
+
+    } catch (error) {
+        console.error(`Provisioning failed overall for ${userEmail}, space ${spaceId}:`, error);
+        const errorMessage = (error instanceof Error) ? error.message : 'Unknown provisioning error';
+        // Attempt to mark subscription as failed if possible (best effort)
+        if (userRecord) { 
+            try {
+                 await prisma.subscription.updateMany({
+                    where: { userId: platformUserId, communityId: communityId, status: 'active' }, 
+                    data: { status: 'provisioning_failed' }
+                 });
+            } catch (updateError) {
+                console.error("Failed to mark subscription as provisioning_failed after main error:", updateError);
+            }
+        }
+        // Return failure with error message and potentially the original error details
+        return { success: false, error: errorMessage, details: error }; 
+    }
+}
+
+================
+File: prisma/seed.ts
+================
+import { PrismaClient } from '@prisma/client'; // Use standard import
+
+const prisma = new PrismaClient();
+
+async function main() {
+  console.log('Start seeding ...');
+
+  // --- Make sure to replace placeholders below with actual values ---
+  const indcCircleSpaceId = 1978096; // *** REPLACE WITH ACTUAL INDC CIRCLE SPACE ID ***
+  const indcMonthlyPriceId = 'price_1RDmDcQcqOoXl2I4Cf403OyY'; // *** PASTE ID FROM STRIPE TEST MODE ***
+  const indcAnnualPriceId = 'price_1RDmfqQcqOoXl2I4RrltL7GG';   // *** PASTE ID FROM STRIPE TEST MODE ***
+
+  const solasCircleSpaceId = 1978085; // *** REPLACE WITH ACTUAL SOLAS NUA CIRCLE SPACE ID ***
+  const solasMonthlyPriceId = 'price_1RDmDCQcqOoXl2I4zCfXe25C'; // *** PASTE ID FROM STRIPE TEST MODE ***
+  const solasAnnualPriceId = 'price_1RDme0QcqOoXl2I4vJpmqfTW';   // *** PASTE ID FROM STRIPE TEST MODE ***
+  // --- End of values to replace ---
+
+  // Check if placeholder values are still present
+  if (
+    indcMonthlyPriceId.startsWith('price_YOUR_') ||
+    indcAnnualPriceId.startsWith('price_YOUR_') ||
+    solasMonthlyPriceId.startsWith('price_YOUR_') ||
+    solasAnnualPriceId.startsWith('price_YOUR_')
+  ) {
+    console.warn("\n⚠️ WARNING: Placeholder Stripe Price IDs found in seed.ts.");
+    console.warn("Please replace them with actual IDs from your Stripe Test Dashboard.");
+    console.warn("Seeding will continue with placeholders, but checkout will likely fail.\n");
+  }
+
+  // --- Create Sample Communities ---
+  const community1 = await prisma.community.upsert({
+    where: { slug: 'indc-community' },
+    update: { // Update existing record with potentially new IDs
+      circleSpaceId: indcCircleSpaceId,
+      stripePriceIdMonthly: indcMonthlyPriceId,
+      stripePriceIdAnnually: indcAnnualPriceId,
+    },
+    create: {
+      name: 'INDC Community',
+      slug: 'indc-community',
+      description: 'Connect with the Irish Network DC. Engage in discussions, events, and networking.',
+      imageUrl: '/images/indc-placeholder.png', // Add a placeholder image
+      circleSpaceId: indcCircleSpaceId,
+      stripePriceIdMonthly: indcMonthlyPriceId,
+      stripePriceIdAnnually: indcAnnualPriceId,
+    },
+  });
+  console.log(`Created/updated community: ${community1.name}`);
+
+  const community2 = await prisma.community.upsert({
+    where: { slug: 'solas-nua' },
+    update: { // Update existing record with potentially new IDs
+      circleSpaceId: solasCircleSpaceId,
+      stripePriceIdMonthly: solasMonthlyPriceId,
+      stripePriceIdAnnually: solasAnnualPriceId,
+    },
+    create: {
+      name: 'Solas Nua',
+      slug: 'solas-nua',
+      description: 'Explore contemporary Irish arts and culture. Join the conversation.',
+      imageUrl: '/images/solas-placeholder.png', // Add a placeholder image
+      circleSpaceId: solasCircleSpaceId,
+      stripePriceIdMonthly: solasMonthlyPriceId,
+      stripePriceIdAnnually: solasAnnualPriceId,
+    },
+  });
+  console.log(`Created/updated community: ${community2.name}`);
+
+  console.log('Seeding finished.');
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
+
+================
+File: .eslintignore
+================
+# Ignore Next.js build outputs
+.next
+
+# Ignore node_modules
+node_modules
+
+# Ignore generated Prisma client
+app/generated/
+app/generated/**
+app/generated/**/*
+node_modules/.prisma/
+.prisma/
+**/generated/**
+
+================
+File: .gitignore
+================
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# Dotenv file
+.env
+.env*.local
+
+# Prisma
+prisma/generated/
+app/generated/prisma/
+
+# Node
+node_modules/
+
+================
+File: middleware.ts
+================
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+
+// Define public routes
+const isPublicRoute = createRouteMatcher([
+  "/",                  // Make the landing page public
+  "/landing-test",      // Make the landing-test page public
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/cancel",
+  "/api/webhooks/clerk",
+  "/api/webhooks/stripe"
+]);
+
+export default clerkMiddleware(
+  async (auth, req) => {
+    // If the route is not public, protect it
+    if (!isPublicRoute(req)) {
+      await auth.protect();
+    }
+  }
+);
+
+export const config = {
+  matcher: ["/((?!.+\\.[\\w]+$|_next).*)", "/", "/(api|trpc)(.*)"],
+};
+
+================
+File: app/layout.tsx
+================
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import {
+  ClerkProvider,
+  SignedIn,
+  SignedOut,
+  UserButton
+} from '@clerk/nextjs';
+import Link from 'next/link';
+import { Button } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/sonner";
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "Communities.irish Demo",
+  description: "Demo platform for Circle integration",
+};
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode; }>) {
+  return (
+    <ClerkProvider>
+      <html lang="en" suppressHydrationWarning>
+        <body className={inter.className}>
+          <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="container flex h-14 max-w-screen-2xl items-center">
+              <Link href="/" className="mr-6 flex items-center space-x-2">
+                <span className="font-bold inline-block">Communities.irish</span>
+              </Link>
+              <nav className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
+                <SignedIn>
+                   <Link href="/admin"><Button variant="ghost">Admin</Button></Link>
+                  <UserButton afterSignOutUrl="/" />
+                </SignedIn>
+                <SignedOut>
+                  <Link href="/sign-in">
+                    <Button variant="ghost">Sign In</Button>
+                  </Link>
+                  <Link href="/sign-up">
+                    <Button>Sign Up</Button>
+                  </Link>
+                </SignedOut>
+              </nav>
+            </div>
+          </header>
+          <main className="container flex-1 py-8">{children}</main>
+          <Toaster />
+        </body>
+      </html>
+    </ClerkProvider>
+  );
+}
+
+================
+File: prisma/schema.prisma
+================
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+  output   = "../node_modules/.prisma/client" // Standard location, don't change unless necessary
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// --- Models --- 
+
+model User {
+  id          String    @id // Clerk User ID
+  email       String    @unique
+  name        String?
+  circleCommunityMemberId Int? @unique // Store Circle Community Member ID
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  subscriptions Subscription[]
+}
+
+model Community {
+  id        Int     @id @default(autoincrement())
+  name      String
+  slug      String  @unique
+  description String?
+  imageUrl  String?
+  circleSpaceId Int   @unique // Circle Space ID this community maps to
+  stripePriceIdMonthly String? // Stripe Price ID for monthly plan
+  stripePriceIdAnnually String? // Stripe Price ID for annual plan
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id          Int      @id @default(autoincrement())
+  userId      String
+  communityId Int
+  status      String   // e.g., 'active', 'canceled', 'past_due', 'provisioning_failed'
+  stripeSubscriptionId String? @unique // Store Stripe Subscription ID
+  stripeCustomerId     String? // Store Stripe Customer ID
+  planType    String?  // e.g., 'monthly', 'annual'
+  startDate   DateTime?
+  endDate     DateTime? // When the subscription expires or was canceled
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, communityId]) // User can only have one subscription per community
+}
+
+================
+File: package.json
+================
+{
+  "name": "shift-next-live",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint --ignore-pattern 'app/generated/**' --ignore-pattern '.next/**' --ignore-pattern 'node_modules/**' ."
+  },
+  "dependencies": {
+    "@clerk/nextjs": "^6.14.3",
+    "@prisma/client": "^6.6.0",
+    "@radix-ui/react-avatar": "^1.1.4",
+    "@radix-ui/react-dialog": "^1.1.7",
+    "@radix-ui/react-dropdown-menu": "^2.1.7",
+    "@radix-ui/react-label": "^2.1.3",
+    "@radix-ui/react-navigation-menu": "^1.2.6",
+    "@radix-ui/react-slot": "^1.2.0",
+    "@stripe/stripe-js": "^7.0.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.488.0",
+    "next": "15.3.0",
+    "next-themes": "^0.4.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sonner": "^2.0.3",
+    "stripe": "^18.0.0",
+    "svix": "^1.64.0",
+    "tailwind-merge": "^3.2.0",
+    "tw-animate-css": "^1.2.5"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.3.0",
+    "prisma": "^6.6.0",
+    "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5"
+  },
+  "prisma": {
+    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+  }
+}
+
+
+
+================================================================
+End of Codebase
+================================================================

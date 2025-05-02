@@ -1,6 +1,12 @@
-import { SignUp } from "@clerk/nextjs";
+'use client';
 
-export default function SignUpPage() {
+import { usePathname } from 'next/navigation';
+import { SignUp } from "@clerk/nextjs";
+import { Suspense } from 'react';
+
+function SignUpContent() {
+  const pathname = usePathname();
+  
   return (
     <div className="flex items-center justify-center min-h-screen">
       <SignUp 
@@ -10,10 +16,25 @@ export default function SignUpPage() {
             footerActionLink: 'text-primary hover:text-primary/90',
           }
         }}
+        path={pathname}
         routing="path"
         signInUrl="/sign-in"
         redirectUrl="/"
       />
     </div>
+  );
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-4">Loading registration...</h2>
+        </div>
+      </div>
+    }>
+      <SignUpContent />
+    </Suspense>
   );
 } 

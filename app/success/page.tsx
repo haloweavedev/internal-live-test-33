@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function SuccessPage() {
+function SuccessContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session_id');
   const [isLoading, setIsLoading] = useState(true);
@@ -43,7 +43,6 @@ export default function SuccessPage() {
     return (
       <div className="container mx-auto p-4 text-center">
         <p>Verifying your subscription...</p>
-        {/* Add a loading spinner here if desired */}
       </div>
     );
   }
@@ -70,5 +69,17 @@ export default function SuccessPage() {
         Go to Homepage
       </Link>
     </div>
+  );
+}
+
+export default function SuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="container mx-auto p-4 text-center">
+        <p>Loading payment confirmation...</p>
+      </div>
+    }>
+      <SuccessContent />
+    </Suspense>
   );
 } 

@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint --ignore-pattern 'app/generated/**' --ignore-pattern '.next/**' --ignore-pattern 'node_modules/**' ."
+    "lint": "eslint ."
   },
   "dependencies": {
     "@clerk/nextjs": "^6.14.3",

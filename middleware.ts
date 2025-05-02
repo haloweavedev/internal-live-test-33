@@ -3,6 +3,7 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 // Define public routes
 const isPublicRoute = createRouteMatcher([
   "/",                  // Make the landing page public
+  "/landing-test",      // Make the landing-test page public
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/cancel",
@@ -16,7 +17,7 @@ export default clerkMiddleware(
     if (!isPublicRoute(req)) {
       await auth.protect();
     }
-  },// Enable debug logs in development
+  }
 );
 
 export const config = {
