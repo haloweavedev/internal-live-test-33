@@ -14,7 +14,12 @@ interface CircleSpaceAdminData {
   // Add other fields if needed for display
 }
 
-export default async function PlatformSpacePage({ params }: { params: { spaceId: string } }) {
+interface PlatformSpacePageProps {
+  params: Promise<{ spaceId: string }>;
+  searchParams?: Promise<Record<string, string | string[]>>;
+}
+
+export default async function PlatformSpacePage(props: PlatformSpacePageProps) {
   // Get authentication status
   const { userId } = await auth();
   
@@ -24,6 +29,7 @@ export default async function PlatformSpacePage({ params }: { params: { spaceId:
   }
 
   // Get and validate spaceId from params
+  const params = await props.params;
   const { spaceId } = params;
   const spaceIdNum = Number.parseInt(spaceId, 10);
   
