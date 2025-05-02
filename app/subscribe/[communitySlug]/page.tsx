@@ -19,6 +19,14 @@ interface CommunitySubscriptionDetails {
     stripePriceIdAnnually: string | null;
 }
 
+// Interface for price data
+interface PriceData {
+    amount: number;
+    currency: string;
+    interval?: string;
+    formattedAmount: string;
+}
+
 // Fetch community details client-side via our API route
 async function fetchCommunityDetails(slug: string): Promise<CommunitySubscriptionDetails | null> {
     try {
@@ -39,6 +47,28 @@ async function fetchCommunityDetails(slug: string): Promise<CommunitySubscriptio
     }
 }
 
+// Fetch price details from Stripe
+async function fetchPriceDetails(priceId: string): Promise<PriceData | null> {
+    try {
+        const response = await fetch(`/api/get-stripe-price?priceId=${encodeURIComponent(priceId)}`);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to fetch price details');
+        }
+        
+        const data = await response.json();
+        if (!data.success || !data.data) {
+            throw new Error(data.error || 'Invalid response from price API');
+        }
+        
+        return data.data;
+    } catch (error) {
+        console.error("Error fetching price details:", error);
+        toast.error(`Failed to load price details: ${(error as Error).message}`);
+        return null;
+    }
+}
+
 export default function SubscribePage() {
     const params = useParams();
     const router = useRouter();
@@ -46,6 +76,11 @@ export default function SubscribePage() {
     const [community, setCommunity] = useState<CommunitySubscriptionDetails | null>(null);
     const [loading, setLoading] = useState(true);
     const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null); // 'monthly' | 'annual' | null
+    
+    // State for price data
+    const [monthlyPrice, setMonthlyPrice] = useState<PriceData | null>(null);
+    const [annualPrice, setAnnualPrice] = useState<PriceData | null>(null);
+    const [pricesLoading, setPricesLoading] = useState(false);
 
     useEffect(() => {
         if (communitySlug) {
@@ -55,11 +90,38 @@ export default function SubscribePage() {
                     if (!data) {
                         toast.error("Community not found or not configured for subscriptions.");
                         // Consider redirecting or showing a persistent error state
+                        return;
                     }
                     setCommunity(data);
+                    
+                    // After getting community, fetch price details
+                    setPricesLoading(true);
+                    
+                    // Fetch monthly price if available
+                    const fetchMonthlyPromise = data.stripePriceIdMonthly 
+                        ? fetchPriceDetails(data.stripePriceIdMonthly)
+                        : Promise.resolve(null);
+                        
+                    // Fetch annual price if available
+                    const fetchAnnualPromise = data.stripePriceIdAnnually
+                        ? fetchPriceDetails(data.stripePriceIdAnnually)
+                        : Promise.resolve(null);
+                    
+                    // Process both price fetches in parallel
+                    return Promise.all([fetchMonthlyPromise, fetchAnnualPromise]);
+                })
+                .then(prices => {
+                    if (prices) {
+                        const [monthlyPriceData, annualPriceData] = prices;
+                        setMonthlyPrice(monthlyPriceData);
+                        setAnnualPrice(annualPriceData);
+                    }
                 })
                 // Catch is handled within fetchCommunityDetails
-                .finally(() => setLoading(false));
+                .finally(() => {
+                    setLoading(false);
+                    setPricesLoading(false);
+                });
         }
     }, [communitySlug]);
 
@@ -124,6 +186,18 @@ export default function SubscribePage() {
         </div>
     );
 
+    // Format the price display with loading state and fallbacks
+    const formatPriceDisplay = (priceData: PriceData | null, loading: boolean, type: 'monthly' | 'annual') => {
+        if (loading) return "Loading price...";
+        if (!priceData) return type === 'monthly' ? "Monthly plan not available" : "Annual plan not available";
+        
+        if (type === 'monthly') {
+            return `${priceData.formattedAmount} / month`;
+        }
+        
+        return `${priceData.formattedAmount} / year`;
+    };
+
     return (
         <div className="container mx-auto p-4">
             <h1 className="text-3xl font-bold mb-4">Subscribe to {community.name}</h1>
@@ -135,13 +209,15 @@ export default function SubscribePage() {
                     <CardHeader>
                         <CardTitle>Monthly Plan</CardTitle>
                         <CardDescription>Access all content on a monthly basis.</CardDescription>
-                        <p className="text-2xl font-semibold pt-2">{community.stripePriceIdMonthly ? "$XX / month" : "Not Available"}</p> 
+                        <p className="text-2xl font-semibold pt-2">
+                            {formatPriceDisplay(monthlyPrice, pricesLoading, 'monthly')}
+                        </p> 
                     </CardHeader>
                     <CardContent>
                         <Button
                             className="w-full"
                             onClick={() => handleCheckout(community.stripePriceIdMonthly, 'monthly')}
-                            disabled={!!checkoutLoading || !community.stripePriceIdMonthly}
+                            disabled={!!checkoutLoading || !community.stripePriceIdMonthly || pricesLoading}
                         >
                             {checkoutLoading === 'monthly' ? 'Processing...' : 'Subscribe Monthly'}
                         </Button>
@@ -153,13 +229,15 @@ export default function SubscribePage() {
                     <CardHeader>
                         <CardTitle>Annual Plan</CardTitle>
                         <CardDescription>Save money with an annual subscription.</CardDescription>
-                        <p className="text-2xl font-semibold pt-2">{community.stripePriceIdAnnually ? "$YY / year" : "Not Available"}</p> 
+                        <p className="text-2xl font-semibold pt-2">
+                            {formatPriceDisplay(annualPrice, pricesLoading, 'annual')}
+                        </p> 
                     </CardHeader>
                     <CardContent>
                          <Button
                             className="w-full"
                             onClick={() => handleCheckout(community.stripePriceIdAnnually, 'annual')}
-                            disabled={!!checkoutLoading || !community.stripePriceIdAnnually}
+                            disabled={!!checkoutLoading || !community.stripePriceIdAnnually || pricesLoading}
                         >
                             {checkoutLoading === 'annual' ? 'Processing...' : 'Subscribe Annually'}
                         </Button>
