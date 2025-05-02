@@ -2,6 +2,7 @@
   "name": "shift-next-live",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "node scripts/vercel-build.js && next build",

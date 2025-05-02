@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { execSync } = require('node:child_process');
+import { execSync } from 'node:child_process';
 
 // This script is used by Vercel to build the project and handle Prisma migrations
 // It ensures that Prisma client is correctly generated and migrations are applied

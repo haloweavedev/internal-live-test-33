@@ -1,6 +1,5 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
 import { SignIn } from "@clerk/nextjs";
 import { Suspense } from 'react';
 
