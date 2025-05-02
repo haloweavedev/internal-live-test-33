@@ -15,7 +15,7 @@ export default async function SpacesPage() {
           </p>
           <div className="border border-gray-200 rounded-lg p-4 mb-4">
             <p className="text-gray-500 text-sm">
-              Loading available communities...
+              Loading available communities... [not real]
             </p>
           </div>
         </div>
