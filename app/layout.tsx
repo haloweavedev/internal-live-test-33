@@ -15,7 +15,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Communities.irish Demo",
-  description: "Demo platform for Circle integration",
+  description: "Demo platform for communities.shift.irish",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode; }>) {
