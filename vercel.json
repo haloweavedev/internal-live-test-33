@@ -1,0 +1,5 @@
+{
+  "buildCommand": "node scripts/vercel-build.js && next build",
+  "installCommand": "npm install",
+  "framework": "nextjs"
+} 
