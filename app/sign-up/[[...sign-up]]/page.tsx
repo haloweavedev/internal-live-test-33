@@ -16,7 +16,7 @@ function SignUpContent() {
         path="/sign-up"
         routing="path"
         signInUrl="/sign-in"
-        redirectUrl="/"
+        redirectUrl="/spaces"
       />
     </div>
   );

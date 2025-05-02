@@ -28,7 +28,7 @@ function isPotentialApiErrorData(data: unknown): data is { message?: string; err
 
 /**
  * Calls the Circle Headless Auth API (for generating member tokens).
- * @param endpoint The API endpoint path (e.g., 'auth_token') - **VERIFY THIS PATH**
+ * @param endpoint The API endpoint path (e.g., 'auth_token')
  * @param options Fetch options including method, body, cache, and URL parameters.
  * @returns The JSON response from the API.
  * @throws Error if API keys are missing or if the API call fails.
@@ -45,7 +45,7 @@ export async function callCircleHeadlessAuthApi<T = unknown>(
 
   // Ensure endpoint doesn't start with a slash
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
-  // ** Verify the correct base path for Headless Auth API from Circle Docs **
+  // Use the correct base path for Headless Auth API
   const url = new URL(`${CIRCLE_BASE_URL}/api/v1/headless/${cleanEndpoint}`); 
 
   if (params) {

@@ -12,15 +12,15 @@ async function main() {
 
   const solasCircleSpaceId = 1978085; // *** REPLACE WITH ACTUAL SOLAS NUA CIRCLE SPACE ID ***
   const solasMonthlyPriceId = 'price_1RDmDCQcqOoXl2I4zCfXe25C'; // *** PASTE ID FROM STRIPE TEST MODE ***
-  const solasAnnualPriceId = 'price_1RDme0QcqOoXl2I4vJpmqfTW';   // *** PASTE ID FROM STRIPE TEST MODE ***
+  const solasAnnualPriceId = 'price_1RDme0QcqOoXl2I4vJpmqfTW'; // Replace with actual Stripe Price ID
   // --- End of values to replace ---
 
   // Check if placeholder values are still present
   if (
-    indcMonthlyPriceId.startsWith('price_YOUR_') ||
-    indcAnnualPriceId.startsWith('price_YOUR_') ||
-    solasMonthlyPriceId.startsWith('price_YOUR_') ||
-    solasAnnualPriceId.startsWith('price_YOUR_')
+    indcMonthlyPriceId.startsWith('price_REPLACE_ME_') ||
+    indcAnnualPriceId.startsWith('price_REPLACE_ME_') ||
+    solasMonthlyPriceId.startsWith('price_REPLACE_ME_') ||
+    solasAnnualPriceId.startsWith('price_REPLACE_ME_')
   ) {
     console.warn("\n⚠️ WARNING: Placeholder Stripe Price IDs found in seed.ts.");
     console.warn("Please replace them with actual IDs from your Stripe Test Dashboard.");
@@ -31,6 +31,10 @@ async function main() {
   const community1 = await prisma.community.upsert({
     where: { slug: 'indc-community' },
     update: { // Update existing record with potentially new IDs
+      name: 'INDC Community',
+      slug: 'indc-community',
+      description: 'Connect with the Irish Network DC. Engage in discussions, events, and networking.',
+      imageUrl: '/images/placeholder-indc.png',
       circleSpaceId: indcCircleSpaceId,
       stripePriceIdMonthly: indcMonthlyPriceId,
       stripePriceIdAnnually: indcAnnualPriceId,
@@ -39,7 +43,7 @@ async function main() {
       name: 'INDC Community',
       slug: 'indc-community',
       description: 'Connect with the Irish Network DC. Engage in discussions, events, and networking.',
-      imageUrl: '/images/indc-placeholder.png', // Add a placeholder image
+      imageUrl: '/images/placeholder-indc.png',
       circleSpaceId: indcCircleSpaceId,
       stripePriceIdMonthly: indcMonthlyPriceId,
       stripePriceIdAnnually: indcAnnualPriceId,
@@ -50,6 +54,10 @@ async function main() {
   const community2 = await prisma.community.upsert({
     where: { slug: 'solas-nua' },
     update: { // Update existing record with potentially new IDs
+      name: 'Solas Nua',
+      slug: 'solas-nua',
+      description: 'Explore contemporary Irish arts and culture. Join the conversation.',
+      imageUrl: '/images/placeholder-solas.png',
       circleSpaceId: solasCircleSpaceId,
       stripePriceIdMonthly: solasMonthlyPriceId,
       stripePriceIdAnnually: solasAnnualPriceId,
@@ -58,7 +66,7 @@ async function main() {
       name: 'Solas Nua',
       slug: 'solas-nua',
       description: 'Explore contemporary Irish arts and culture. Join the conversation.',
-      imageUrl: '/images/solas-placeholder.png', // Add a placeholder image
+      imageUrl: '/images/placeholder-solas.png',
       circleSpaceId: solasCircleSpaceId,
       stripePriceIdMonthly: solasMonthlyPriceId,
       stripePriceIdAnnually: solasAnnualPriceId,

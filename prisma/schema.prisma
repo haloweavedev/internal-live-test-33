@@ -19,44 +19,44 @@ datasource db {
 // --- Models --- 
 
 model User {
-  id          String    @id // Clerk User ID
-  email       String    @unique
-  name        String?
-  circleCommunityMemberId Int? @unique // Store Circle Community Member ID
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  subscriptions Subscription[]
+  id                      String    @id // Clerk User ID
+  email                   String    @unique
+  name                    String?
+  stripeCustomerId        String?   // Stripe Customer ID, nullable initially
+  circleCommunityMemberId Int?      @unique // Circle Community Member ID, nullable initially
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  subscriptions           Subscription[]
 }
 
 model Community {
-  id        Int     @id @default(autoincrement())
-  name      String
-  slug      String  @unique
-  description String?
-  imageUrl  String?
-  circleSpaceId Int   @unique // Circle Space ID this community maps to
-  stripePriceIdMonthly String? // Stripe Price ID for monthly plan
-  stripePriceIdAnnually String? // Stripe Price ID for annual plan
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  subscriptions Subscription[]
+  id                      Int     @id @default(autoincrement())
+  name                    String  // e.g., "INDC Community", "Solas Nua"
+  slug                    String  @unique // e.g., "indc-community", "solas-nua"
+  description             String?
+  imageUrl                String? // URL for display on communities.shift.irish
+  circleSpaceId           Int     @unique // The ID of the corresponding SECRET space created manually in Circle
+  stripePriceIdMonthly    String? // Stripe Price ID for the monthly plan for this community's space
+  stripePriceIdAnnually   String? // Stripe Price ID for the annual plan for this community's space
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  subscriptions           Subscription[]
 }
 
 model Subscription {
-  id          Int      @id @default(autoincrement())
-  userId      String
-  communityId Int
-  status      String   // e.g., 'active', 'canceled', 'past_due', 'provisioning_failed'
-  stripeSubscriptionId String? @unique // Store Stripe Subscription ID
-  stripeCustomerId     String? // Store Stripe Customer ID
-  planType    String?  // e.g., 'monthly', 'annual'
-  startDate   DateTime?
-  endDate     DateTime? // When the subscription expires or was canceled
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                      Int      @id @default(autoincrement())
+  userId                  String   // Foreign key to User.id (Clerk ID)
+  communityId             Int      // Foreign key to Community.id
+  status                  String   // e.g., 'active', 'canceled', 'past_due', 'provisioning_failed'
+  stripeSubscriptionId    String?  @unique // Stripe Subscription ID
+  planType                String?  // 'monthly' or 'annual'
+  startDate               DateTime? // When the subscription became active
+  endDate                 DateTime? // When the subscription expires/expired or was canceled
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade) // If user is deleted, cascade delete subscriptions
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade) // If community is deleted, cascade delete subscriptions
 
-  @@unique([userId, communityId]) // User can only have one subscription per community
+  @@unique([userId, communityId]) // Prevent duplicate subscriptions for the same user/community
 }

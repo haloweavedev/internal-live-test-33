@@ -48,9 +48,8 @@ export async function callCircleMemberApi<T = unknown>(
 
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
     
-    // --- CORRECTED URL Path for Headless Member API --- 
+    // Use the correct base path for Headless Member API
     const url = new URL(`${CIRCLE_BASE_URL}/api/headless/v1/${cleanEndpoint}`);
-    // --- End Correction --- 
 
     if (params) {
         for (const [key, value] of Object.entries(params)) {

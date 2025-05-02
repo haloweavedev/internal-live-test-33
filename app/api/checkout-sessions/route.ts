@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth, createClerkClient } from '@clerk/nextjs/server';
 import Stripe from 'stripe';
-import type { ApiResponse, CheckoutSessionData } from '@/types'; // Use import type and adjust path if needed (e.g., @/types/api)
+import type { ApiResponse, CheckoutSessionData } from '@/types';
 // import { provisionUserAccess } from '@/lib/provision'; // Commented out as likely unused in this specific context
 
 // --- Environment Variable Checks ---
 console.log(`API Route Init: CLERK_SECRET_KEY is ${process.env.CLERK_SECRET_KEY ? 'SET' : 'NOT SET'}`);
 console.log(`API Route Init: STRIPE_SECRET_KEY is ${process.env.STRIPE_SECRET_KEY ? 'SET' : 'NOT SET'}`);
+console.log(`API Route Init: NEXT_PUBLIC_BASE_URL is ${process.env.NEXT_PUBLIC_BASE_URL ? 'SET' : 'NOT SET'}`);
 const clerkSecretKey = process.env.CLERK_SECRET_KEY;
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 // --- End Checks ---

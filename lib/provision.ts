@@ -66,11 +66,16 @@ export async function provisionCircleAccess(
         try {
             userRecord = await prisma.user.upsert({
                 where: { id: platformUserId },
-                update: { name: userName, email: userEmail }, // Update name/email just in case
+                update: { 
+                    name: userName, 
+                    email: userEmail, 
+                    stripeCustomerId: stripeCustomerId // Update stripeCustomerId here
+                },
                 create: {
                     id: platformUserId,
                     email: userEmail,
                     name: userName,
+                    stripeCustomerId: stripeCustomerId // Set stripeCustomerId here
                 },
                 select: { id: true, email: true, name: true, circleCommunityMemberId: true, createdAt: true, updatedAt: true }
             }) as UserWithCircleId; // Add type assertion for safety
@@ -86,7 +91,6 @@ export async function provisionCircleAccess(
             update: {
                 status: 'active',
                 stripeSubscriptionId: stripeSubscriptionId,
-                stripeCustomerId: stripeCustomerId,
                 planType: planType,
                 startDate: new Date(),
                 endDate: null, // Clear end date on reactivation/update
@@ -96,7 +100,6 @@ export async function provisionCircleAccess(
                 communityId: communityId,
                 status: 'active',
                 stripeSubscriptionId: stripeSubscriptionId,
-                stripeCustomerId: stripeCustomerId,
                 planType: planType,
                 startDate: new Date(),
             },
@@ -248,20 +251,12 @@ export async function provisionCircleAccess(
         return { success: true, data: undefined };
 
     } catch (error) {
-        console.error(`Provisioning failed overall for ${userEmail}, space ${spaceId}:`, error);
-        const errorMessage = (error instanceof Error) ? error.message : 'Unknown provisioning error';
-        // Attempt to mark subscription as failed if possible (best effort)
-        if (userRecord) { 
-            try {
-                 await prisma.subscription.updateMany({
-                    where: { userId: platformUserId, communityId: communityId, status: 'active' }, 
-                    data: { status: 'provisioning_failed' }
-                 });
-            } catch (updateError) {
-                console.error("Failed to mark subscription as provisioning_failed after main error:", updateError);
-            }
-        }
-        // Return failure with error message and potentially the original error details
-        return { success: false, error: errorMessage, details: error }; 
+        // Main error handling
+        console.error('Error provisioning Circle access:', error);
+        
+        return { 
+            success: false, 
+            error: 'Error provisioning Circle access'
+        };
     }
 } 
