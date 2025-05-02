@@ -5,8 +5,6 @@ import { SignIn } from "@clerk/nextjs";
 import { Suspense } from 'react';
 
 function SignInContent() {
-  const pathname = usePathname();
-  
   return (
     <div className="flex items-center justify-center min-h-screen">
       <SignIn 
@@ -16,7 +14,7 @@ function SignInContent() {
             footerActionLink: 'text-primary hover:text-primary/90',
           }
         }}
-        path={pathname}
+        path="/sign-in"
         routing="path"
         signUpUrl="/sign-up"
         redirectUrl="/"
