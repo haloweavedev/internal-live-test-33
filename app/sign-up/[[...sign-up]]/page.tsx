@@ -1,12 +1,9 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
 import { SignUp } from "@clerk/nextjs";
 import { Suspense } from 'react';
 
 function SignUpContent() {
-  const pathname = usePathname();
-  
   return (
     <div className="flex items-center justify-center min-h-screen">
       <SignUp 
@@ -16,7 +13,7 @@ function SignUpContent() {
             footerActionLink: 'text-primary hover:text-primary/90',
           }
         }}
-        path={pathname}
+        path="/sign-up"
         routing="path"
         signInUrl="/sign-in"
         redirectUrl="/"
