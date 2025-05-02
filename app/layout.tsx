@@ -14,7 +14,7 @@ import { Toaster } from "@/components/ui/sonner";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Communities.irish Demo",
+  title: "Communities.irish Next Demo",
   description: "Demo platform for communities.shift.irish",
 };
 
