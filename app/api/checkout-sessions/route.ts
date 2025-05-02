@@ -103,29 +103,40 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
             return NextResponse.json({ success: false, error: 'Missing or invalid planType (string)' }, { status: 400 });
         }
 
-        // Construct URLs based on environment
-        const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-        // Use VERCEL_URL for deployment previews/production, fallback to NEXT_PUBLIC_BASE_URL or localhost for local dev
-        const host = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_BASE_URL?.replace(/^https?:\/\//, '') || 'localhost:3000';
-        const baseUrl = `${protocol}://${host}`;
-        
-        // --- Construct Success URL Correctly --- 
-        // Prepare parameters for the query string
+        // Determine the Base URL for redirects
+        let baseUrl: string;
+        if (process.env.NEXT_PUBLIC_BASE_URL) {
+            // Prioritize the explicitly set public base URL if available
+            baseUrl = process.env.NEXT_PUBLIC_BASE_URL.replace(/\/$/, ''); // Remove trailing slash if present
+            console.log(`Using NEXT_PUBLIC_BASE_URL: ${baseUrl}`);
+        } else if (process.env.VERCEL_URL) {
+            // Fallback to Vercel's deployment URL (useful for previews without explicit base URL)
+            const protocol = 'https'; // Vercel deployments are always HTTPS
+            baseUrl = `${protocol}://${process.env.VERCEL_URL}`;
+            console.log(`Using VERCEL_URL: ${baseUrl}`);
+        } else {
+            // Default for local development
+            baseUrl = 'http://localhost:3000';
+            console.log(`Using default localhost URL: ${baseUrl}`);
+        }
+
+        // Construct Success URL (ensure params are correctly appended)
         const successUrlParams = new URLSearchParams({
             spaceId: circleSpaceId.toString(),
             communitySlug: communitySlug,
             // session_id={CHECKOUT_SESSION_ID} is added by Stripe automatically
         });
-        // Construct the final URL with proper structure
+        // Ensure no double slashes if baseUrl already ends with one (though replace above handles it)
         const successUrl = `${baseUrl}/payment-success?${successUrlParams.toString()}&session_id={CHECKOUT_SESSION_ID}`;
-        // --- End Success URL Construction --- 
 
-        const cancelUrl = `${baseUrl}/subscribe/${communitySlug}?cancelled=true`; // Use communitySlug in cancel URL
+        // Construct Cancel URL
+        const cancelUrl = `${baseUrl}/subscribe/${communitySlug}?cancelled=true`;
 
-        console.log(`Using Base URL: ${baseUrl}`);
-        console.log(`Creating Stripe checkout session for user ${userId} (${userEmail}), price ${priceId}`);
+        console.log(`Final Base URL for redirects: ${baseUrl}`);
         console.log(`Constructed Success URL for Stripe: ${successUrl}`);
         console.log(`Constructed Cancel URL for Stripe: ${cancelUrl}`);
+
+        console.log(`Creating Stripe checkout session for user ${userId} (${userEmail}), price ${priceId}`);
 
         // Look for an existing Stripe customer by email, or create one if not found
         const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
