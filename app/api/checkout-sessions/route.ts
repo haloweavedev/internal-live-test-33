@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { auth, createClerkClient } from '@clerk/nextjs/server';
 import Stripe from 'stripe';
 import type { ApiResponse, CheckoutSessionData } from '@/types';
@@ -103,26 +104,28 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
         }
 
         // Construct URLs based on environment
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+        const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+        // Use VERCEL_URL for deployment previews/production, fallback to NEXT_PUBLIC_BASE_URL or localhost for local dev
+        const host = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_BASE_URL?.replace(/^https?:\/\//, '') || 'localhost:3000';
+        const baseUrl = `${protocol}://${host}`;
         
         // --- Construct Success URL Correctly --- 
-        // Create the base URL first
-        const successUrlBase = `${baseUrl}/payment-success`;
         // Prepare parameters for the query string
         const successUrlParams = new URLSearchParams({
-            // session_id is added by Stripe via the template variable in successUrlBaseWithTemplate
             spaceId: circleSpaceId.toString(),
             communitySlug: communitySlug,
+            // session_id={CHECKOUT_SESSION_ID} is added by Stripe automatically
         });
-        // Construct the final URL with the template variable AND the other parameters
-        const successUrl = `${successUrlBase}?session_id={CHECKOUT_SESSION_ID}&${successUrlParams.toString()}`; 
+        // Construct the final URL with proper structure
+        const successUrl = `${baseUrl}/payment-success?${successUrlParams.toString()}&session_id={CHECKOUT_SESSION_ID}`;
         // --- End Success URL Construction --- 
 
         const cancelUrl = `${baseUrl}/subscribe/${communitySlug}?cancelled=true`; // Use communitySlug in cancel URL
 
+        console.log(`Using Base URL: ${baseUrl}`);
         console.log(`Creating Stripe checkout session for user ${userId} (${userEmail}), price ${priceId}`);
-        console.log(`Success URL: ${successUrl}`);
-        console.log(`Cancel URL: ${cancelUrl}`);
+        console.log(`Constructed Success URL for Stripe: ${successUrl}`);
+        console.log(`Constructed Cancel URL for Stripe: ${cancelUrl}`);
 
         // Look for an existing Stripe customer by email, or create one if not found
         const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
