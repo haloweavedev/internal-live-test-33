@@ -23,7 +23,7 @@ interface CommunityData {
   id: number;
   name: string;
   slug: string;
-  circleSpaceId: number | null; // Allow null if DB allows
+  circleSpaceId: number; // Remove null, must be a number because DB requires it
   stripePriceIdMonthly: string | null;
   stripePriceIdAnnually: string | null;
 }
@@ -53,8 +53,9 @@ export default function EditCommunityButton({ community }: EditCommunityButtonPr
       const newErrors: Record<string, string | undefined> = {};
       const spaceIdNum = Number(formData.circleSpaceId);
 
+      // Circle Space ID is required and must be a positive integer
       if (!formData.circleSpaceId || Number.isNaN(spaceIdNum) || !Number.isInteger(spaceIdNum) || spaceIdNum <= 0) {
-          newErrors.circleSpaceId = 'Circle Space ID must be a positive whole number.';
+          newErrors.circleSpaceId = 'Circle Space ID is required and must be a positive whole number.';
       }
       if (formData.stripePriceIdMonthly && !formData.stripePriceIdMonthly.startsWith('price_')) {
           newErrors.stripePriceIdMonthly = 'Monthly Price ID should start with "price_". Leave blank if none.';
@@ -78,9 +79,10 @@ export default function EditCommunityButton({ community }: EditCommunityButtonPr
     setErrors({}); // Clear previous errors
 
     try {
+      // Circle Space ID is now guaranteed to be a valid number by validation
       const result = await updateCommunityConfiguration({
         communityId: community.id,
-        circleSpaceId: formData.circleSpaceId ? Number.parseInt(formData.circleSpaceId, 10) : null, // Send null if empty
+        circleSpaceId: Number.parseInt(formData.circleSpaceId, 10),
         stripePriceIdMonthly: formData.stripePriceIdMonthly || null, // Send null if empty
         stripePriceIdAnnually: formData.stripePriceIdAnnually || null, // Send null if empty
       });

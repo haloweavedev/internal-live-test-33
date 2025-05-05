@@ -38,7 +38,7 @@ interface Community {
   id: number;
   name: string;
   slug: string;
-  circleSpaceId: number | null;
+  circleSpaceId: number;
   stripePriceIdMonthly: string | null;
   stripePriceIdAnnually: string | null;
   createdAt: Date;
@@ -216,7 +216,7 @@ export default async function AdminPage() {
                                 <TableRow key={community.id}>
                                     <TableCell className="font-medium">{community.name}</TableCell>
                                     <TableCell>{community.slug}</TableCell>
-                                    <TableCell>{community.circleSpaceId || 'Not Set'}</TableCell>
+                                    <TableCell>{community.circleSpaceId}</TableCell>
                                     <TableCell>{community.stripePriceIdMonthly || 'Not Set'}</TableCell>
                                     <TableCell>{community.stripePriceIdAnnually || 'Not Set'}</TableCell>
                                     <TableCell>{community.createdAt.toLocaleDateString()}</TableCell>

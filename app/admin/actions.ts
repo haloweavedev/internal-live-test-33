@@ -8,7 +8,7 @@ import { z } from 'zod'; // For validation
 // Define Zod schema for input validation
 const UpdateCommunitySchema = z.object({
     communityId: z.number().int().positive(),
-    circleSpaceId: z.number().int().positive().nullable(), // Allow null
+    circleSpaceId: z.number().int().positive(), // Remove nullable, must be a positive integer
     stripePriceIdMonthly: z.string().startsWith('price_').nullable().or(z.literal('')), // Allow null or empty string
     stripePriceIdAnnually: z.string().startsWith('price_').nullable().or(z.literal('')), // Allow null or empty string
 });
@@ -66,7 +66,7 @@ export async function updateCommunityConfiguration(
         await prisma.community.update({
             where: { id: communityId },
             data: {
-                circleSpaceId: circleSpaceId, // Use validated number or null
+                circleSpaceId: circleSpaceId, // Now guaranteed to be a number (not null)
                 // Convert empty strings to null before saving
                 stripePriceIdMonthly: stripePriceIdMonthly || null,
                 stripePriceIdAnnually: stripePriceIdAnnually || null,
