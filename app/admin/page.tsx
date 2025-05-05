@@ -45,7 +45,7 @@ interface Community {
 }
 
 interface DetailedSubscription {
-  id: string;
+  id: number;
   status: string;
   planType: string | null;
   createdAt: Date;
