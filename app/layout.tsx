@@ -24,16 +24,27 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <html lang="en" suppressHydrationWarning>
         <body className={inter.className}>
           <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="container flex h-14 max-w-screen-2xl items-center">
+            <div className="container flex h-16 max-w-screen-2xl items-center px-4">
               <Link href="/" className="mr-6 flex items-center space-x-2">
-                <span className="font-bold inline-block">Communities.irish</span>
+                <span className="text-lg font-semibold inline-block">Communities.irish</span>
               </Link>
-              <nav className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
+              <nav className="flex flex-1 items-center justify-end space-x-4">
                 <SignedIn>
-                   <Link href="/admin"><Button variant="ghost">Admin</Button></Link>
+                  <Link href="/spaces" className="mr-2">
+                    <Button variant="ghost">Explore Spaces</Button>
+                  </Link>
+                  <Link href="/account" className="mr-2">
+                    <Button variant="ghost">My Account</Button>
+                  </Link>
+                  <Link href="/admin">
+                    <Button variant="ghost">Admin</Button>
+                  </Link>
                   <UserButton afterSignOutUrl="/" />
                 </SignedIn>
                 <SignedOut>
+                  <Link href="/spaces" className="mr-2">
+                    <Button variant="ghost">Explore Spaces</Button>
+                  </Link>
                   <Link href="/sign-in">
                     <Button variant="ghost">Sign In</Button>
                   </Link>
@@ -44,7 +55,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               </nav>
             </div>
           </header>
-          <main className="container flex-1 py-8">{children}</main>
+          <main className="flex-1">{children}</main>
           <Toaster />
         </body>
       </html>

@@ -7,6 +7,8 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { toast } from "sonner"; // For notifications
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Interface matching the data from /api/get-communities
 interface CommunitySubscriptionDetails {
@@ -174,11 +176,20 @@ export default function SubscribePage() {
         }
     };
 
-    if (loading) return <div className="container mx-auto p-4 text-center"><p>Loading community details...</p></div>;
+    if (loading) return (
+        <div className="container max-w-3xl mx-auto p-8 text-center">
+            <Skeleton className="h-8 w-56 mx-auto mb-4" />
+            <Skeleton className="h-4 w-full max-w-md mx-auto mb-16" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <Skeleton className="h-64 w-full rounded-lg" />
+                <Skeleton className="h-64 w-full rounded-lg" />
+            </div>
+        </div>
+    );
     
     if (!community) return (
-        <div className="container mx-auto p-4 text-center">
-             <Alert variant="destructive">
+        <div className="container max-w-3xl mx-auto p-8 text-center">
+             <Alert variant="destructive" className="max-w-md mx-auto">
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Community Not Found</AlertTitle>
                 <AlertDescription>The community you are looking for could not be found or is not available for subscription.</AlertDescription>
@@ -186,34 +197,53 @@ export default function SubscribePage() {
         </div>
     );
 
-    // Format the price display with loading state and fallbacks
-    const formatPriceDisplay = (priceData: PriceData | null, loading: boolean, type: 'monthly' | 'annual') => {
-        if (loading) return "Loading price...";
-        if (!priceData) return type === 'monthly' ? "Monthly plan not available" : "Annual plan not available";
-        
-        if (type === 'monthly') {
-            return `${priceData.formattedAmount} / month`;
-        }
-        
-        return `${priceData.formattedAmount} / year`;
-    };
-
     return (
-        <div className="container mx-auto p-4">
-            <h1 className="text-3xl font-bold mb-4">Subscribe to {community.name}</h1>
-            <p className="text-muted-foreground mb-6">{community.description || 'Join our community!'}</p>
+        <div className="container max-w-5xl mx-auto py-12 px-4">
+            <div className="text-center mb-12">
+                <h1 className="text-3xl md:text-4xl font-bold mb-4">Subscribe to {community.name}</h1>
+                <p className="text-muted-foreground max-w-2xl mx-auto">{community.description || 'Join our community to access exclusive content and connect with like-minded individuals.'}</p>
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
                 {/* Monthly Plan Card */} 
-                <Card className={!community.stripePriceIdMonthly ? "opacity-50 pointer-events-none" : ""}>
-                    <CardHeader>
-                        <CardTitle>Monthly Plan</CardTitle>
-                        <CardDescription>Access all content on a monthly basis.</CardDescription>
-                        <p className="text-2xl font-semibold pt-2">
-                            {formatPriceDisplay(monthlyPrice, pricesLoading, 'monthly')}
-                        </p> 
+                <Card className={`overflow-hidden ${!community.stripePriceIdMonthly ? "opacity-50 pointer-events-none" : ""}`}>
+                    <CardHeader className="pb-4">
+                        <CardTitle className="text-2xl">Monthly Membership</CardTitle>
+                        <CardDescription className="mt-1">Pay month-to-month, cancel anytime.</CardDescription>
+                        <div className="mt-4">
+                            {pricesLoading ? (
+                                <Skeleton className="h-10 w-32" />
+                            ) : (
+                                <div className="flex items-end">
+                                    <span className="text-3xl font-bold">
+                                        {monthlyPrice?.formattedAmount}
+                                    </span>
+                                    <span className="text-muted-foreground ml-1 mb-1">/month</span>
+                                </div>
+                            )}
+                        </div>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-6">
+                        <ul className="space-y-2 text-sm">
+                            <li className="flex items-center">
+                                <svg className="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                Full access to all community content
+                            </li>
+                            <li className="flex items-center">
+                                <svg className="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                Participation in member discussions
+                            </li>
+                            <li className="flex items-center">
+                                <svg className="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                Monthly billing with easy cancellation
+                            </li>
+                        </ul>
                         <Button
                             className="w-full"
                             onClick={() => handleCheckout(community.stripePriceIdMonthly, 'monthly')}
@@ -225,16 +255,54 @@ export default function SubscribePage() {
                 </Card>
 
                 {/* Annual Plan Card */} 
-                <Card className={!community.stripePriceIdAnnually ? "opacity-50 pointer-events-none" : ""}>
-                    <CardHeader>
-                        <CardTitle>Annual Plan</CardTitle>
-                        <CardDescription>Save money with an annual subscription.</CardDescription>
-                        <p className="text-2xl font-semibold pt-2">
-                            {formatPriceDisplay(annualPrice, pricesLoading, 'annual')}
-                        </p> 
+                <Card className={`overflow-hidden ${!community.stripePriceIdAnnually ? "opacity-50 pointer-events-none" : ""}`}>
+                    <CardHeader className="pb-4 relative">
+                        {community.stripePriceIdAnnually && monthlyPrice && annualPrice && (
+                            <Badge className="absolute top-4 right-4" variant="secondary">Best Value</Badge>
+                        )}
+                        <CardTitle className="text-2xl">Annual Membership</CardTitle>
+                        <CardDescription className="mt-1">Save with our annual plan.</CardDescription>
+                        <div className="mt-4">
+                            {pricesLoading ? (
+                                <Skeleton className="h-10 w-32" />
+                            ) : (
+                                <div className="flex items-end">
+                                    <span className="text-3xl font-bold">
+                                        {annualPrice?.formattedAmount}
+                                    </span>
+                                    <span className="text-muted-foreground ml-1 mb-1">/year</span>
+                                </div>
+                            )}
+                        </div>
                     </CardHeader>
-                    <CardContent>
-                         <Button
+                    <CardContent className="space-y-6">
+                        <ul className="space-y-2 text-sm">
+                            <li className="flex items-center">
+                                <svg className="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                Full access to all community content
+                            </li>
+                            <li className="flex items-center">
+                                <svg className="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                Participation in member discussions
+                            </li>
+                            <li className="flex items-center">
+                                <svg className="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                Priority access to special events
+                            </li>
+                            <li className="flex items-center">
+                                <svg className="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                Save with annual billing
+                            </li>
+                        </ul>
+                        <Button
                             className="w-full"
                             onClick={() => handleCheckout(community.stripePriceIdAnnually, 'annual')}
                             disabled={!!checkoutLoading || !community.stripePriceIdAnnually || pricesLoading}
