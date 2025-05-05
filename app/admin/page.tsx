@@ -22,7 +22,7 @@ interface User {
   email: string;
   name: string | null;
   createdAt: Date;
-  circleCommunityMemberId?: string | null;
+  circleCommunityMemberId?: number | null;
   subscriptions: Array<{
     status: string;
     planType: string | null;
