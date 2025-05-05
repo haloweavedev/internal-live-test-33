@@ -7,7 +7,7 @@ import ManageBillingButton from './manage-billing-button';
 
 // Define type for subscription
 interface Subscription {
-  id: string;
+  id: number;
   status: string;
   planType: string | null;
   endDate: Date | null;
